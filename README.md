@@ -1,6 +1,6 @@
 # Latch
 
-Competitive arena FPS (Roblox) inspired by **Roblox Rivals** (Nosniy Games) — not Marvel Rivals.  
+Competitive arena FPS (Roblox) made by Sven.  
 Fast 1v1 / 2v2, first to 5 rounds, shared loadout + Operator abilities. Built as a **Rojo + Luau** MVP with seamless **PC + mobile** controls.
 
 ## Requirements
