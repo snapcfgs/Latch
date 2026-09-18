@@ -1,0 +1,225 @@
+--!strict
+--[[
+	HUD — crosshair, health, ammo, ability CD, round score.
+	Safe-area aware; touch chrome lives in InputController.
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local GuiService = game:GetService("GuiService")
+
+local WeaponsConfig = require(game.ReplicatedStorage.Config.Weapons)
+local OperatorsConfig = require(game.ReplicatedStorage.Config.Operators)
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local HUDController = {}
+HUDController.__index = HUDController
+
+function HUDController.new(remotes: { [string]: RemoteEvent }, weaponController: any, abilityController: any)
+	local self = setmetatable({
+		_remotes = remotes,
+		_weapons = weaponController,
+		_abilities = abilityController,
+		_gui = nil :: ScreenGui?,
+		_labels = {} :: { [string]: TextLabel },
+		_snapshot = {
+			ScoreA = 0,
+			ScoreB = 0,
+			Phase = "Lobby",
+			RoundNumber = 0,
+			RoundsToWin = 5,
+		},
+	}, HUDController)
+	return self
+end
+
+function HUDController:Init()
+	self:_build()
+	self._remotes.MatchSnapshot.OnClientEvent:Connect(function(snap)
+		if typeof(snap) == "table" then
+			self._snapshot = snap
+		end
+	end)
+	self._remotes.DamageNumber.OnClientEvent:Connect(function(payload)
+		self:_damagePopup(payload)
+	end)
+	self._remotes.WeaponHit.OnClientEvent:Connect(function(payload)
+		if typeof(payload) == "table" and payload.Hit then
+			self:_hitmarker(payload.Headshot == true)
+		end
+	end)
+	RunService.RenderStepped:Connect(function()
+		self:_refresh()
+	end)
+end
+
+function HUDController:_build()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "LatchHUD"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Parent = playerGui
+	self._gui = gui
+
+	local inset = GuiService:GetGuiInset()
+	local topPad = math.max(inset.Y, 20)
+
+	local function label(name: string, pos: UDim2, size: UDim2, text: string, textSize: number?): TextLabel
+		local l = Instance.new("TextLabel")
+		l.Name = name
+		l.BackgroundTransparency = 1
+		l.Position = pos
+		l.Size = size
+		l.Font = Enum.Font.GothamBold
+		l.TextSize = textSize or 18
+		l.TextColor3 = Color3.new(1, 1, 1)
+		l.TextStrokeTransparency = 0.5
+		l.Text = text
+		l.Parent = gui
+		self._labels[name] = l
+		return l
+	end
+
+	label("Score", UDim2.new(0.5, -100, 0, topPad + 8), UDim2.fromOffset(200, 28), "0 — 0", 22).TextXAlignment =
+		Enum.TextXAlignment.Center
+	label("Phase", UDim2.new(0.5, -120, 0, topPad + 36), UDim2.fromOffset(240, 22), "LOBBY", 16).TextXAlignment =
+		Enum.TextXAlignment.Center
+
+	label("Health", UDim2.new(0, 24, 1, -70), UDim2.fromOffset(160, 28), "HP 100", 20)
+	label("Ammo", UDim2.new(1, -200, 1, -70), UDim2.fromOffset(180, 28), "30 / 90", 20).TextXAlignment =
+		Enum.TextXAlignment.Right
+	label("Weapon", UDim2.new(1, -200, 1, -98), UDim2.fromOffset(180, 22), "Pulse AR", 16).TextXAlignment =
+		Enum.TextXAlignment.Right
+	label("Ability", UDim2.new(0.5, -80, 1, -48), UDim2.fromOffset(160, 22), "Ability Ready", 14).TextXAlignment =
+		Enum.TextXAlignment.Center
+
+	-- Crosshair
+	local cross = Instance.new("Frame")
+	cross.Name = "Crosshair"
+	cross.AnchorPoint = Vector2.new(0.5, 0.5)
+	cross.Position = UDim2.fromScale(0.5, 0.5)
+	cross.Size = UDim2.fromOffset(4, 4)
+	cross.BackgroundColor3 = Color3.new(1, 1, 1)
+	cross.BorderSizePixel = 0
+	cross.Parent = gui
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(1, 0)
+	c.Parent = cross
+
+	local function arm(dx: number, dy: number, w: number, h: number)
+		local f = Instance.new("Frame")
+		f.AnchorPoint = Vector2.new(0.5, 0.5)
+		f.Position = UDim2.new(0.5, dx, 0.5, dy)
+		f.Size = UDim2.fromOffset(w, h)
+		f.BackgroundColor3 = Color3.new(1, 1, 1)
+		f.BorderSizePixel = 0
+		f.BackgroundTransparency = 0.15
+		f.Parent = gui
+	end
+	arm(0, -12, 2, 10)
+	arm(0, 12, 2, 10)
+	arm(-12, 0, 10, 2)
+	arm(12, 0, 10, 2)
+
+	self._hitmarker = Instance.new("TextLabel")
+	self._hitmarker.Name = "Hitmarker"
+	self._hitmarker.AnchorPoint = Vector2.new(0.5, 0.5)
+	self._hitmarker.Position = UDim2.fromScale(0.5, 0.5)
+	self._hitmarker.Size = UDim2.fromOffset(40, 40)
+	self._hitmarker.BackgroundTransparency = 1
+	self._hitmarker.Text = "×"
+	self._hitmarker.TextSize = 28
+	self._hitmarker.Font = Enum.Font.GothamBold
+	self._hitmarker.TextColor3 = Color3.fromRGB(255, 255, 255)
+	self._hitmarker.Visible = false
+	self._hitmarker.Parent = gui
+end
+
+function HUDController:_refresh()
+	local snap = self._snapshot
+	if self._labels.Score then
+		self._labels.Score.Text = string.format("%d — %d", snap.ScoreA or 0, snap.ScoreB or 0)
+	end
+	if self._labels.Phase then
+		local phase = snap.Phase or "Lobby"
+		local round = snap.RoundNumber or 0
+		self._labels.Phase.Text = string.upper(tostring(phase)) .. (if round > 0 then ("  R" .. tostring(round)) else "")
+	end
+
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if self._labels.Health and hum then
+		self._labels.Health.Text = string.format("HP %d", math.floor(hum.Health + 0.5))
+	end
+
+	local equipped = self._weapons:GetEquipped()
+	local cfg = WeaponsConfig.Weapons[equipped :: any]
+	local ammo = self._weapons:GetAmmo()
+	if self._labels.Weapon and cfg then
+		self._labels.Weapon.Text = cfg.DisplayName
+	end
+	if self._labels.Ammo and cfg then
+		if cfg.Kind == "Melee" then
+			self._labels.Ammo.Text = "MELEE"
+		elseif cfg.Kind == "Projectile" then
+			self._labels.Ammo.Text = "FRAG"
+		else
+			local a = ammo and ammo[equipped]
+			if a then
+				self._labels.Ammo.Text = string.format("%d / %d", a.Mag or 0, a.Reserve or 0)
+			end
+		end
+	end
+
+	if self._labels.Ability then
+		local endsAt = self._abilities:GetCooldownEndsAt()
+		local now = Workspace:GetServerTimeNow()
+		local remain = endsAt - now
+		if remain > 0 then
+			self._labels.Ability.Text = string.format("Ability %.1fs", remain)
+		else
+			local opId = player:GetAttribute("LatchOperator")
+			local op = if typeof(opId) == "string" then OperatorsConfig.Operators[opId :: any] else nil
+			self._labels.Ability.Text = if op then (op.ActiveName .. " Ready") else "Ability Ready"
+		end
+	end
+end
+
+function HUDController:_hitmarker(headshot: boolean)
+	if not self._hitmarker then
+		return
+	end
+	self._hitmarker.TextColor3 = if headshot then Color3.fromRGB(255, 80, 80) else Color3.new(1, 1, 1)
+	self._hitmarker.Visible = true
+	task.delay(0.12, function()
+		if self._hitmarker then
+			self._hitmarker.Visible = false
+		end
+	end)
+end
+
+function HUDController:_damagePopup(payload: any)
+	if typeof(payload) ~= "table" or not self._gui then
+		return
+	end
+	-- Simple screen-space flash near crosshair
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Size = UDim2.fromOffset(60, 24)
+	l.AnchorPoint = Vector2.new(0.5, 0.5)
+	l.Position = UDim2.new(0.5, math.random(-40, 40), 0.5, -40 + math.random(-20, 10))
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 18
+	l.TextColor3 = if payload.Headshot then Color3.fromRGB(255, 90, 90) else Color3.fromRGB(255, 220, 120)
+	l.Text = tostring(payload.Amount or 0)
+	l.Parent = self._gui
+	task.delay(0.5, function()
+		l:Destroy()
+	end)
+end
+
+return HUDController
