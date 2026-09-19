@@ -7,6 +7,7 @@
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 local Remotes = require(game.ReplicatedStorage.Shared.Remotes)
 
@@ -56,6 +57,7 @@ local function setCombatCamera(combat: boolean)
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 		UserInputService.MouseIconEnabled = false
 	else
+		-- Third-person-ish zoom so Studio/PC can click lobby buttons
 		player.CameraMinZoomDistance = 8
 		player.CameraMaxZoomDistance = 24
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -84,7 +86,19 @@ remotes.MatchSnapshot.OnClientEvent:Connect(function(snap)
 	end
 end)
 
--- Esc frees the mouse (handy in Studio playtests)
+-- Roblox can re-lock the mouse every frame in first person; keep forcing unlock in lobby.
+RunService.RenderStepped:Connect(function()
+	if not inCombat then
+		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		end
+		if UserInputService.MouseIconEnabled ~= true then
+			UserInputService.MouseIconEnabled = true
+		end
+	end
+end)
+
+-- Esc frees the mouse (handy in Studio playtests even mid-match)
 UserInputService.InputBegan:Connect(function(inputObj, _processed)
 	if inputObj.KeyCode == Enum.KeyCode.Escape then
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default

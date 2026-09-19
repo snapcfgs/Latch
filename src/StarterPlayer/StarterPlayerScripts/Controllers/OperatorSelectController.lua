@@ -55,6 +55,8 @@ function OperatorSelectController:_build()
 	panel.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
 	panel.BackgroundTransparency = 0.15
 	panel.BorderSizePixel = 0
+	panel.Active = true
+	panel.Modal = true -- keep mouse free for lobby clicks in Studio
 	panel.Parent = gui
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
