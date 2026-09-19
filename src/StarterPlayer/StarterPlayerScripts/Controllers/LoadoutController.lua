@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 
 local WeaponsConfig = require(game.ReplicatedStorage.Config.Weapons)
 local Monetization = require(game.ReplicatedStorage.Config.Monetization)
+local Cosmetics = require(game.ReplicatedStorage.Config.Cosmetics)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -30,6 +31,7 @@ function LoadoutController.new(remotes: { [string]: RemoteEvent })
 		_title = nil :: TextLabel?,
 		_note = nil :: TextLabel?,
 		_scroll = nil :: ScrollingFrame?,
+		_strip = nil :: Frame?,
 	}, LoadoutController)
 	return self
 end
@@ -167,6 +169,77 @@ function LoadoutController:_rebuildButtons()
 		local tokens = if self._profile then tonumber(self._profile.Tokens) or 0 else 0
 		self._note.Text = string.format("Tokens %d · locked guns need Shop / Debug", tokens)
 	end
+	self:_refreshStrip()
+end
+
+function LoadoutController:_swatchColor(weaponId: string): Color3
+	local wrapId = nil
+	if self._profile and typeof(self._profile.EquippedCosmetics) == "table" then
+		wrapId = self._profile.EquippedCosmetics.Wrap
+		local skins = self._profile.EquippedCosmetics.Skins
+		if typeof(skins) == "table" and typeof(skins[weaponId]) == "string" then
+			local skin = Cosmetics.Skins[skins[weaponId]]
+			if skin then
+				return skin.Color
+			end
+		end
+	end
+	if typeof(wrapId) == "string" and Cosmetics.Wraps[wrapId] then
+		return Cosmetics.Wraps[wrapId].Color
+	end
+	local def = Cosmetics.DefaultSkinId(weaponId)
+	if def and Cosmetics.Skins[def] then
+		return Cosmetics.Skins[def].Color
+	end
+	return Color3.fromRGB(70, 78, 90)
+end
+
+function LoadoutController:_refreshStrip()
+	if not self._strip then
+		return
+	end
+	for _, child in self._strip:GetChildren() do
+		if child:IsA("Frame") or child:IsA("TextLabel") then
+			child:Destroy()
+		end
+	end
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.Padding = UDim.new(0, 6)
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Parent = self._strip
+	local slots = { "Primary", "Secondary", "Melee", "Utility" }
+	for i, slot in slots do
+		local wid = self._selection[slot]
+		local cfg = if typeof(wid) == "string" then WeaponsConfig.Weapons[wid :: any] else nil
+		local cell = Instance.new("Frame")
+		cell.Size = UDim2.fromOffset(64, 40)
+		cell.BackgroundColor3 = Color3.fromRGB(28, 32, 44)
+		cell.BorderSizePixel = 0
+		cell.Parent = self._strip
+		local cc = Instance.new("UICorner")
+		cc.CornerRadius = UDim.new(0, 6)
+		cc.Parent = cell
+		local sw = Instance.new("Frame")
+		sw.Size = UDim2.fromOffset(10, 28)
+		sw.Position = UDim2.fromOffset(4, 6)
+		sw.BackgroundColor3 = if typeof(wid) == "string" then self:_swatchColor(wid) else Color3.fromRGB(60, 60, 70)
+		sw.BorderSizePixel = 0
+		sw.Parent = cell
+		local sc = Instance.new("UICorner")
+		sc.CornerRadius = UDim.new(0, 3)
+		sc.Parent = sw
+		local lab = Instance.new("TextLabel")
+		lab.BackgroundTransparency = 1
+		lab.Position = UDim2.fromOffset(16, 2)
+		lab.Size = UDim2.fromOffset(46, 36)
+		lab.Font = Enum.Font.GothamBold
+		lab.TextSize = 10
+		lab.TextColor3 = Color3.new(1, 1, 1)
+		lab.TextWrapped = true
+		lab.Text = string.format("%d\n%s", i, if cfg then cfg.DisplayName else "?")
+		lab.Parent = cell
+	end
 end
 
 function LoadoutController:_build()
@@ -181,8 +254,8 @@ function LoadoutController:_build()
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
 	panel.AnchorPoint = Vector2.new(0, 0.5)
-	panel.Position = UDim2.new(0, 16, 0.5, 40)
-	panel.Size = UDim2.fromOffset(280, 420)
+	panel.Position = UDim2.new(0, 16, 0.55, 80)
+	panel.Size = UDim2.fromOffset(300, 380)
 	panel.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
 	panel.BackgroundTransparency = 0.12
 	panel.BorderSizePixel = 0
@@ -217,10 +290,18 @@ function LoadoutController:_build()
 	note.Parent = panel
 	self._note = note
 
+	local strip = Instance.new("Frame")
+	strip.Name = "LoadoutStrip"
+	strip.BackgroundTransparency = 1
+	strip.Position = UDim2.fromOffset(8, 50)
+	strip.Size = UDim2.new(1, -16, 0, 44)
+	strip.Parent = panel
+	self._strip = strip
+
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.BackgroundTransparency = 1
-	scroll.Position = UDim2.fromOffset(8, 52)
-	scroll.Size = UDim2.new(1, -16, 1, -96)
+	scroll.Position = UDim2.fromOffset(8, 98)
+	scroll.Size = UDim2.new(1, -16, 1, -142)
 	scroll.BorderSizePixel = 0
 	scroll.ScrollBarThickness = 4
 	scroll.CanvasSize = UDim2.fromOffset(0, 0)

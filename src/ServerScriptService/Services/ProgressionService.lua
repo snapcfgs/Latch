@@ -108,8 +108,10 @@ function ProgressionService:GrantForMatch(
 			p.Stats.Matches += 1
 			if info.Won then
 				p.Stats.Wins += 1
+				p.Stats.WinStreak = (p.Stats.WinStreak or 0) + 1
 			else
 				p.Stats.Losses += 1
+				p.Stats.WinStreak = 0
 			end
 			p.Stats.Kills += info.Kills
 			p.Stats.Deaths += info.Deaths

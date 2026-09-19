@@ -46,6 +46,7 @@ local RemoteNames = {
 	-- Lobby / modes / recap (Phase 3)
 	"MatchRecap",
 	"RequestLeaveQueue",
+	"RequestRematch", -- Phase 6: same mode + bot refill after recap
 	-- Progression / economy (Phase 4)
 	"ProfileSync",
 	"RequestProfile",

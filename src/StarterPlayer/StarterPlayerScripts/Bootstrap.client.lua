@@ -1,7 +1,7 @@
 --!strict
 --[[
-	Latch client bootstrap — wires input, slide, weapons, abilities, HUD.
-	Seamless PC + mobile via InputController.
+	Latch client bootstrap — wires input, slide, weapons, abilities, HUD, hub UI.
+	Seamless PC + mobile via InputController. Phase 6: audio / emotes / career / scoreboard.
 ]]
 
 local Players = game:GetService("Players")
@@ -26,12 +26,18 @@ local ShopController = require(Controllers.ShopController)
 local PassController = require(Controllers.PassController)
 local ContractController = require(Controllers.ContractController)
 local ViewmodelController = require(Controllers.ViewmodelController)
+local AudioController = require(Controllers.AudioController)
+local EmoteController = require(Controllers.EmoteController)
+local CareerController = require(Controllers.CareerController)
 
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 end)
 
 local remotes = Remotes.Get()
+
+local audio = AudioController.new(remotes)
+audio:Init()
 
 local input = InputController.new()
 input:Init()
@@ -45,10 +51,29 @@ weapons:Init()
 local abilities = AbilityController.new(input, remotes)
 abilities:Init()
 
-local hud = HUDController.new(remotes, weapons, abilities)
+local hud = HUDController.new(remotes, weapons, abilities, audio)
 hud:Init()
 
-local opSelect = OperatorSelectController.new(remotes)
+input:SetScoreboardCallback(function()
+	hud:ToggleScoreboard()
+end)
+
+-- Soft audio hooks for fire / reload without touching combat math
+input:OnAction(function(name, down)
+	if not down then
+		return
+	end
+	if name == "Fire" then
+		audio:PlayFire()
+	elseif name == "Reload" then
+		audio:Play("Reload")
+	elseif name == "Ability" then
+		-- AbilityFx also plays; this is immediate UI feedback
+		audio:Play("Ability")
+	end
+end)
+
+local opSelect = OperatorSelectController.new(remotes, audio)
 opSelect:Init()
 
 local mapVote = MapVoteController.new(remotes)
@@ -57,10 +82,10 @@ mapVote:Init()
 local loadout = LoadoutController.new(remotes)
 loadout:Init()
 
-local lobby = LobbyController.new(remotes)
+local lobby = LobbyController.new(remotes, audio)
 lobby:Init()
 
-local recap = MatchRecapController.new(remotes)
+local recap = MatchRecapController.new(remotes, audio)
 recap:Init()
 
 local shop = ShopController.new(remotes)
@@ -72,10 +97,16 @@ pass:Init()
 local contracts = ContractController.new(remotes)
 contracts:Init()
 
+local career = CareerController.new(remotes)
+career:Init()
+
+local emotes = EmoteController.new(remotes, audio)
+emotes:Init()
+
 local viewmodel = ViewmodelController.new(remotes)
 viewmodel:Init()
 
--- Expose openers for LobbyController buttons
+-- Expose openers for LobbyController hub tabs
 _G.LatchOpenShop = function()
 	shop:Open()
 end
@@ -84,6 +115,9 @@ _G.LatchOpenPass = function()
 end
 _G.LatchOpenContracts = function()
 	contracts:Open()
+end
+_G.LatchOpenCareer = function()
+	career:Open()
 end
 
 local player = Players.LocalPlayer
@@ -100,7 +134,6 @@ local function setCombatCamera(combat: boolean)
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 		UserInputService.MouseIconEnabled = false
 	else
-		-- Third-person-ish zoom so Studio/PC can click lobby buttons
 		player.CameraMinZoomDistance = 8
 		player.CameraMaxZoomDistance = 24
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -129,7 +162,6 @@ remotes.MatchSnapshot.OnClientEvent:Connect(function(snap)
 	end
 end)
 
--- Roblox can re-lock the mouse every frame in first person; keep forcing unlock in lobby.
 RunService.RenderStepped:Connect(function()
 	if not inCombat then
 		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
@@ -141,7 +173,6 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Esc frees the mouse (handy in Studio playtests even mid-match)
 UserInputService.InputBegan:Connect(function(inputObj, _processed)
 	if inputObj.KeyCode == Enum.KeyCode.Escape then
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -149,4 +180,4 @@ UserInputService.InputBegan:Connect(function(inputObj, _processed)
 	end
 end)
 
-print("[Latch] Client bootstrap complete (Phase 5) — touch=", input:IsTouch())
+print("[Latch] Client bootstrap complete (Phase 6 HUD/juice) — touch=", input:IsTouch())

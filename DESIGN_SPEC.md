@@ -271,3 +271,8 @@ Fuse + Warden added to `Config/Operators.lua` / AbilityService / OperatorSelect 
 
 ### Remotes added
 `DeathRecap`
+
+
+## Phase 6 — UI / HUD / juice (implemented)
+
+Lobby hub (operator cards, loadout strip + swatches, queue clarity, Shop/Pass/Contracts/Career, player banner level/wrap/streak), in-match HUD polish (weapon crosshair, living pips, ability radial, 5-line kill feed, Tab scoreboard, mobile safe-area chrome), match recap rematch + reward bar tweens, AudioController silent stubs (`Config/Sounds.lua`), EmoteController (6 Cosmetics stubs). Remotes: `RequestRematch`. Win streak on `Stats.WinStreak`.

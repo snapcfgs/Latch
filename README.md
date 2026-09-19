@@ -27,14 +27,18 @@ Project file: `default.project.json` maps `src/` → `ReplicatedStorage`, `Serve
 
 ## How to play (PC)
 
-1. Pick an Operator on the left lobby panel (loadout panel also available).
-2. **Queue** from the right mode menu **or** walk onto a colored queue pad (ProximityPrompt / touch).
-3. Controls:
+1. Pick an **Operator** on the left card row; set **Loadout** (strip 1–4 shows skin/wrap swatches).
+2. Check the top **player banner** (level · wrap · win streak) and hub tabs: **Shop / Pass / Contracts / Career**.
+3. Lobby **emote** row (bottom) — 6 stubs (bob + billboard).
+4. **Queue** from the right mode menu **or** walk onto a colored queue pad (ProximityPrompt / touch).
+5. Controls:
    - **Mouse1** fire / melee / throw (depends on equipped)
-   - **1–4** weapon slots (loadout primary/secondary/melee/utility) · **RMB** ADS
+   - **1–4** weapon slots (primary/secondary/melee/utility) · **RMB** ADS
    - **E** cycle weapon · **R** reload · **Q** ability
    - **Shift** sprint · **C / Ctrl** crouch · crouch while sprinting = **slide**
    - **Space** jump
+   - **Tab** scoreboard (humans + bots) mid-match
+   - **Esc** frees mouse (Studio playtests)
 
 ### Solo Studio Play (bots)
 
@@ -61,7 +65,7 @@ Same rules and netcode; only the input surface changes.
 
 1. In Studio: **Test** → **Device Emulator** (or the device dropdown in the test toolbar).
 2. Pick a phone/tablet profile so `UserInputService.TouchEnabled` is true.
-3. Play. On-screen buttons appear: **FIRE**, **JUMP**, **SLIDE**, **ABILITY**, **R**, **GUN**, **RUN**, plus a right-side look drag zone.
+3. Play. On-screen buttons (safe-area padded): **FIRE**, **ADS**, **JUMP**, **SLIDE**, **ABILITY**, **RELOAD**, **SWAP**, **BOARD** (scoreboard), **RUN**, plus a right-side **LOOK ZONE**.
 4. Touch chrome is hidden when keyboard is present and touch is not (desktop).
 
 ### Real phone
@@ -253,12 +257,42 @@ Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. 
 6. First-person combat — tinted viewmodel gun visible; die → death recap string
 7. Slide+Jump cancel; spam jump on land → speed capped; fire on land → wider spread briefly
 
+
+## Phase 6 — UI / HUD / juice polish
+
+### Lobby hub
+- Operator **card row** with accent stripes; loadout **strip 1–4** + skin/wrap swatches
+- Queue buttons + clearer pad prompts; hub tabs **Shop / Pass / Contracts / Career**
+- Player banner: **level**, equipped **wrap**, **win streak** (`ProfileSync`)
+- **EmoteController** — 6 Cosmetics emote stubs (CFrame bob + Billboard)
+
+### In-match HUD
+- Crosshair style/gap by weapon + ADS; health, ammo, utility count
+- Ability **radial** cooldown; round score + **team living pips** (humans + bots)
+- Kill feed capped at **5** lines; damage numbers kept
+- **Tab** / mobile **BOARD** scoreboard (players + bots)
+- Mobile chrome: FIRE, ADS, JUMP, SLIDE, ABILITY, RELOAD, SWAP, BOARD, LOOK ZONE (safe-area)
+
+### Match end
+- Recap scoreboard (bots + humans); Tokens / XP / Pass bar tweens
+- **Rematch** → `RequestRematch` (same mode, bot refill after recap)
+
+### Audio
+- `Config/Sounds.lua` + `AudioController` — placeholder Sound stubs (**no toolbox IDs**)
+- Wired: fire, hit, ability, UI click (pitch-varied; silent + print fallback)
+
+### How to test
+1. `rojo serve` + Play Solo — lobby feels like a hub (banner, tabs, emotes, queue)
+2. Device emulator — confirm all touch buttons + look zone padded
+3. Mid-match **Tab** scoreboard; finish match → rematch queues same mode
+4. Output window shows `[Latch:Audio] beep …` stubs when firing / clicking
+
 ## Known MVP gaps
 
 - Bot AI is competent but not tournament-level (no grenade throws / advanced peeks yet)
 - Ranked / ELO still later
 - First-person zoom lock is a simple camera distance clamp
-- Lobby bot “emotes” are Billboard stubs
+- Lobby bot ambient emotes remain simple; player emotes are Phase 6 stubs
 - Killcam optional (skipped); death recap line only
 
 ## License / assets

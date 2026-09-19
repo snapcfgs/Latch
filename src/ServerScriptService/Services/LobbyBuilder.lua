@@ -161,12 +161,13 @@ function LobbyBuilder.Build(): Folder
 			-- ProximityPrompt for pad queue (client also listens)
 			local prompt = Instance.new("ProximityPrompt")
 			prompt.ActionText = "Queue " .. cfg.DisplayName
-			prompt.ObjectText = "Latch"
-			prompt.HoldDuration = 0.2
-			prompt.MaxActivationDistance = 14
+			prompt.ObjectText = cfg.DisplayName .. " · pad or menu"
+			prompt.HoldDuration = 0.15
+			prompt.MaxActivationDistance = 16
 			prompt.RequiresLineOfSight = false
+			prompt.KeyboardKeyCode = Enum.KeyCode.E
 			prompt.Parent = pad
-			billboard(pad, cfg.DisplayName, Color3.new(1, 1, 1))
+			billboard(pad, "▶ " .. cfg.DisplayName, Color3.new(1, 1, 1))
 		end
 	end
 

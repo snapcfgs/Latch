@@ -61,6 +61,9 @@ function MatchService.new(
 		_data = nil :: any,
 		_matchStartedAt = nil :: number?,
 		_playerRoundsWon = {} :: { [number]: number },
+		_rematchRequests = {} :: { [number]: boolean },
+		_rematchModeId = nil :: string?,
+		_rematchSkip = false,
 	}, MatchService)
 	return self
 end
@@ -98,6 +101,11 @@ function MatchService:Init()
 				self._fillModeId = nil
 			end
 			self:_broadcastSnapshot()
+		end)
+	end
+	if self._remotes.RequestRematch then
+		self._remotes.RequestRematch.OnServerEvent:Connect(function(player)
+			self:_onRematch(player)
 		end)
 	end
 
@@ -656,9 +664,16 @@ function MatchService:_finishMatch()
 			Entries = entries,
 		})
 	end
+	self._rematchRequests = {}
+	self._rematchModeId = self._modeId
+	self._rematchSkip = false
 	self:_broadcastSnapshot()
-	task.wait(MatchSettings.MatchRecapSeconds or 8)
+	local recapEnds = Workspace:GetServerTimeNow() + (MatchSettings.MatchRecapSeconds or 8)
+	while Workspace:GetServerTimeNow() < recapEnds and not self._rematchSkip do
+		task.wait(0.2)
+	end
 	self:_endToLobby()
+	self:_flushRematchQueue()
 end
 
 function MatchService:_playerWon(actor: Actor, winner: string): boolean
@@ -755,6 +770,47 @@ end
 function MatchService:_teamVacated(team: string): boolean
 	local list = if team == "A" then self._teamA else self._teamB
 	return #list == 0
+end
+
+function MatchService:_onRematch(player: Player)
+	if self._phase ~= "MatchRecap" and self._phase ~= "MatchEnd" then
+		return
+	end
+	self._rematchRequests[player.UserId] = true
+	self._rematchModeId = self._modeId or self._queuedModeId or MatchSettings.DefaultModeId
+	-- Solo / all humans rematched → skip remaining recap wait
+	local humans = 0
+	local rematched = 0
+	for _, actor in self:_allMatchActors() do
+		if not ActorUtil.IsBot(actor) then
+			humans += 1
+			if self._rematchRequests[ActorUtil.UserId(actor)] then
+				rematched += 1
+			end
+		end
+	end
+	if humans > 0 and rematched >= humans then
+		self._rematchSkip = true
+	end
+	if self._remotes.Announce then
+		self._remotes.Announce:FireClient(player, { Message = "Rematch queued — " .. tostring(self._rematchModeId) })
+	end
+end
+
+function MatchService:_flushRematchQueue()
+	local mode = self._rematchModeId
+	local requests = self._rematchRequests
+	self._rematchRequests = {}
+	self._rematchModeId = nil
+	self._rematchSkip = false
+	if typeof(mode) ~= "string" or not ModesConfig.Get(mode) then
+		return
+	end
+	for _, p in Players:GetPlayers() do
+		if requests[p.UserId] then
+			self:_onQueue(p, mode)
+		end
+	end
 end
 
 function MatchService:_endToLobby()
