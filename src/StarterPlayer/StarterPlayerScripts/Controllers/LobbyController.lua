@@ -168,7 +168,7 @@ function LobbyController:_buildMenu()
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.BackgroundTransparency = 1
 	scroll.Position = UDim2.fromOffset(8, 76)
-	scroll.Size = UDim2.new(1, -16, 1, -120)
+	scroll.Size = UDim2.new(1, -16, 1, -156)
 	scroll.ScrollBarThickness = 4
 	scroll.CanvasSize = UDim2.fromOffset(0, 0)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -195,6 +195,41 @@ function LobbyController:_buildMenu()
 				self:_queue(modeId)
 			end)
 		end
+	end
+
+	-- Economy shortcuts (also open via lobby kiosks)
+	local eco = Instance.new("Frame")
+	eco.BackgroundTransparency = 1
+	eco.Size = UDim2.new(1, -16, 0, 28)
+	eco.Position = UDim2.new(0, 8, 1, -76)
+	eco.Parent = panel
+	local ecoLayout = Instance.new("UIListLayout")
+	ecoLayout.FillDirection = Enum.FillDirection.Horizontal
+	ecoLayout.Padding = UDim.new(0, 4)
+	ecoLayout.Parent = eco
+	for _, info in {
+		{ "Shop", "LatchOpenShop" },
+		{ "Pass", "LatchOpenPass" },
+		{ "Jobs", "LatchOpenContracts" },
+	} do
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.fromOffset(58, 26)
+		b.BackgroundColor3 = Color3.fromRGB(45, 55, 75)
+		b.TextColor3 = Color3.new(1, 1, 1)
+		b.Font = Enum.Font.GothamBold
+		b.TextSize = 11
+		b.Text = info[1]
+		b.Parent = eco
+		local bc = Instance.new("UICorner")
+		bc.CornerRadius = UDim.new(0, 5)
+		bc.Parent = b
+		local globalName = info[2]
+		b.MouseButton1Click:Connect(function()
+			local fn = (_G :: any)[globalName]
+			if typeof(fn) == "function" then
+				fn()
+			end
+		end)
 	end
 
 	local leave = Instance.new("TextButton")

@@ -31,7 +31,7 @@ aftman.toml / wally.toml if useful
 2. Queue fill (bot fill timers) → map vote → operator+loadout lock (8s) → countdown
 3. Round modes: eliminate opposing team; first to 5 round wins
 4. Continuous modes: FFA / TDM / Gun Cycle with timed respawn
-5. Match recap stub → return to lobby
+5. Match recap (Tokens/XP) → return to lobby
 6. Modes: see Phase 3 (`Config/Modes.lua`)
 
 ## Movement
@@ -91,7 +91,7 @@ Lobby is a real `LobbyBuilder` space (pads, kiosk stubs, alcove) with ambient bo
 
 ## Out of scope (still later)
 - Ranked / ELO
-- Monetization / skins shop / Tokens economy (Phase 4)
+- Ranked cosmetics marketplace polish (Phase 4 ships core economy)
 - Full lobby cosmetics
 - Real party sync (Ready Together is a soft stub in Phase 3)
 - Complex animation packs
@@ -187,7 +187,7 @@ Ids keep `AssaultRifle` / `Pistol` / `Knife` / `FragGrenade` for the defaults so
 - Limb / torso / head multipliers from `Weapons.BodyMultiplier`
 - Burst (`CycleBurst`) client-queued; balance in Config only
 - Utilities: Frag explosion; Flash → `FlashEffect` HUD; Smoke → `VFX.SmokeSphere`; Stim → 30 HP / 2s, 1 per round
-- Loadout: 1 of each slot via `SetLoadout` + `LoadoutController` (unlock-all until Phase 4 Tokens)
+- Loadout: 1 of each slot via `SetLoadout` + `LoadoutController` (UnlockedWeapons gate)
 - Bots randomize loadout; `GetEquipped` drives bot fire; `KillFeed` / `Announce` include bots
 
 ### Remotes added
@@ -204,10 +204,10 @@ Ids keep `AssaultRifle` / `Pistol` / `Knife` / `FragGrenade` for the defaults so
 - Extended (not forked) for all modes; generalized bot fill via `FillSeconds` / `FillTarget`; team sizes 3 and 4 supported
 - Flow: Queue → MapVote → **OperatorLock** → Countdown → rounds/continuous → **MatchRecap** → Lobby
 - FFA/GunCycle use unique per-fighter team ids (`F{userId}`) so `_sameTeam` / bot targeting work
-- Stats (K/D/damage) tracked in WeaponService for recap; Tokens/XP are 0 placeholders until Phase 4
+- Stats (K/D/damage) tracked in WeaponService for recap; ProgressionService fills Tokens/XP
 
 ### Lobby
-- `LobbyBuilder` (+ `ArenaBuilder` facade): central floor, shop/pass/contract/leaderboard stubs, operator alcove, Ready Together party **soft stub**
+- `LobbyBuilder` (+ `ArenaBuilder` facade): central floor, shop/pass/contract kiosks (live), leaderboard stub, operator alcove, Ready Together party **soft stub**
 - Queue pads with original colors + ProximityPrompt; LobbyController menu for mobile
 - LobbyBotDirector wanders between pads and lingers (visual queue join)
 
@@ -216,3 +216,30 @@ Ids keep `AssaultRifle` / `Pistol` / `Knife` / `FragGrenade` for the defaults so
 
 ### Client
 - `LobbyController`, `MatchRecapController`; OperatorSelect slimmed to operator picks; queue UI on the right
+
+
+## Phase 4 — Progression & economy (implemented)
+
+### Profile (`DataService`)
+Versioned profile: Tokens, Scrap, SkinTickets, Xp/Level, UnlockedWeapons, EquippedLoadout, Cosmetics, Pass, Contracts, Stats, CasePity.  
+DataStore `LatchPlayer_v1` when available; **in-memory fallback in Studio**. Autosave 60s + BindToClose when DataStores work.
+
+### Progression
+Match end → win 25 / loss 10 Tokens + XP bonuses; Pass XP; Stats; contract progress. Recap shows real grants.
+
+### Shop / Cases / Cosmetics
+Featured, weapons, skins, wraps, Skin Case Alpha/Beta (ticket or debug). Pity 10 → Rare+ guarantee; duplicate → Scrap.  
+`ViewmodelController` recolors tool/viewmodel Parts from equipped skin/wrap.
+
+### Battle Pass
+Season 01 "Live Wire", 40 tiers, Free + Prime. **20 Pass XP = 1 tier** (see README formula).
+
+### Contracts
+3 dailies; 24h UTC live / 30m session Studio refresh.
+
+### Monetization
+`IS_MONETIZATION_LIVE = false` — Prompt* no-ops; Studio DebugGrant for Starter Bundle etc.
+
+### Remotes added
+`ProfileSync`, `RequestProfile`, `ShopBuy`, `ShopResult`, `OpenCase`, `EquipCosmetic`, `PassClaim`, `PassResult`, `ContractClaim`, `ContractRefresh`, `ContractResult`, `DebugGrant`, `PromptPurchase`
+

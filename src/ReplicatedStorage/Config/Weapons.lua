@@ -2,7 +2,7 @@
 --[[
 	Weapons — full Phase 2 roster. All damage / fire rate / ADS / pellet balance here.
 	Default loadout: Pulse AR / Sidearm / Blade / Frag.
-	Phase 4 will gate unlocks with Tokens; for now all weapons are selectable in LoadoutController.
+	Phase 4: unlocks gated via DataService UnlockedWeapons + Shop Tokens / Debug Grant.
 ]]
 
 export type WeaponId =

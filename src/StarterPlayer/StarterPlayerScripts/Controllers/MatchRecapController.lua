@@ -1,6 +1,6 @@
 --!strict
 --[[
-	MatchRecapController — post-match K/D / damage / Tokens+XP placeholders (Phase 4).
+	MatchRecapController — post-match K/D / damage / real Tokens+XP from ProgressionService.
 ]]
 
 local Players = game:GetService("Players")
@@ -113,7 +113,7 @@ function MatchRecapController:_build()
 	note.TextSize = 12
 	note.TextColor3 = Color3.fromRGB(140, 150, 160)
 	note.TextWrapped = true
-	note.Text = "Tokens / XP placeholders — economy arrives in Phase 4.\nReturning to lobby…"
+	note.Text = "Rewards from this match applied to your profile.\nReturning to lobby…"
 	note.Parent = panel
 end
 

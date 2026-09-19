@@ -147,6 +147,23 @@ function WeaponService:SetupActor(actor: Actor, randomizeLoadout: boolean?)
 	local uid = ActorUtil.UserId(actor)
 	local existing = self._states[uid]
 	local loadout: LoadoutMap = if existing then existing.Loadout else copyDefaultLoadout()
+	-- Humans: prefer profile EquippedLoadout when no in-match state yet
+	if existing == nil and not ActorUtil.IsBot(actor) then
+		local data = self._deps and self._deps.Data
+		local player = actor :: Player
+		if data and data.GetOrLoad and typeof(player) == "Instance" and player:IsA("Player") then
+			local profile = data:GetOrLoad(player)
+			local el = profile.EquippedLoadout
+			if typeof(el) == "table" and typeof(el.Primary) == "string" then
+				loadout = {
+					Primary = el.Primary,
+					Secondary = el.Secondary,
+					Melee = el.Melee,
+					Utility = el.Utility,
+				}
+			end
+		end
+	end
 	if randomizeLoadout == true or (ActorUtil.IsBot(actor) and existing == nil) then
 		loadout = randomLoadout()
 	end
@@ -338,6 +355,21 @@ function WeaponService:_inLoadout(state: WeaponState, weaponId: string): boolean
 	return L.Primary == weaponId or L.Secondary == weaponId or L.Melee == weaponId or L.Utility == weaponId
 end
 
+function WeaponService:_isUnlocked(player: Player, weaponId: string): boolean
+	local data = self._deps and self._deps.Data
+	if data and data.IsWeaponUnlocked then
+		return data:IsWeaponUnlocked(player, weaponId)
+	end
+	-- Fallback: starters only if no DataService
+	local Monetization = require(game.ReplicatedStorage.Config.Monetization)
+	for _, id in Monetization.StarterWeapons do
+		if id == weaponId then
+			return true
+		end
+	end
+	return false
+end
+
 function WeaponService:SetLoadout(player: Player, payload: any)
 	if typeof(payload) ~= "table" then
 		return
@@ -362,6 +394,19 @@ function WeaponService:SetLoadout(player: Player, payload: any)
 	if not wu or wu.Slot ~= "Utility" then
 		return
 	end
+	-- Phase 4: gate by UnlockedWeapons (debug grant / shop unlock escape hatch)
+	if not self:_isUnlocked(player, primary) then
+		return
+	end
+	if not self:_isUnlocked(player, secondary) then
+		return
+	end
+	if not self:_isUnlocked(player, melee) then
+		return
+	end
+	if not self:_isUnlocked(player, utility) then
+		return
+	end
 	local state = self._states[player.UserId]
 	if not state then
 		self:SetupPlayer(player)
@@ -370,7 +415,6 @@ function WeaponService:SetLoadout(player: Player, payload: any)
 	if not state then
 		return
 	end
-	-- Phase 2: unlock-all. Phase 4 gates with Tokens.
 	state.Loadout = {
 		Primary = primary,
 		Secondary = secondary,
@@ -379,6 +423,18 @@ function WeaponService:SetLoadout(player: Player, payload: any)
 	}
 	if not self:_inLoadout(state, state.Equipped) then
 		state.Equipped = primary
+	end
+	-- Persist to profile when DataService present
+	local data = self._deps and self._deps.Data
+	if data and data.Mutate then
+		data:Mutate(player, function(p)
+			p.EquippedLoadout = {
+				Primary = primary,
+				Secondary = secondary,
+				Melee = melee,
+				Utility = utility,
+			}
+		end)
 	end
 	self:_syncActorState(player)
 end

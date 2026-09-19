@@ -22,6 +22,10 @@ local MapVoteController = require(Controllers.MapVoteController)
 local LoadoutController = require(Controllers.LoadoutController)
 local LobbyController = require(Controllers.LobbyController)
 local MatchRecapController = require(Controllers.MatchRecapController)
+local ShopController = require(Controllers.ShopController)
+local PassController = require(Controllers.PassController)
+local ContractController = require(Controllers.ContractController)
+local ViewmodelController = require(Controllers.ViewmodelController)
 
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
@@ -58,6 +62,29 @@ lobby:Init()
 
 local recap = MatchRecapController.new(remotes)
 recap:Init()
+
+local shop = ShopController.new(remotes)
+shop:Init()
+
+local pass = PassController.new(remotes)
+pass:Init()
+
+local contracts = ContractController.new(remotes)
+contracts:Init()
+
+local viewmodel = ViewmodelController.new(remotes)
+viewmodel:Init()
+
+-- Expose openers for LobbyController buttons
+_G.LatchOpenShop = function()
+	shop:Open()
+end
+_G.LatchOpenPass = function()
+	pass:Open()
+end
+_G.LatchOpenContracts = function()
+	contracts:Open()
+end
 
 local player = Players.LocalPlayer
 player.CameraMode = Enum.CameraMode.Classic
@@ -122,4 +149,4 @@ UserInputService.InputBegan:Connect(function(inputObj, _processed)
 	end
 end)
 
-print("[Latch] Client bootstrap complete — touch=", input:IsTouch())
+print("[Latch] Client bootstrap complete (Phase 4) — touch=", input:IsTouch())

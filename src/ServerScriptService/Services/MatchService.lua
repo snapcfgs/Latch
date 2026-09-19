@@ -57,6 +57,10 @@ function MatchService.new(
 		_matchWinner = nil :: string?, -- "A" | "B" | userId string for FFA
 		_abortMatch = false,
 		_pendingRespawns = {} :: { [number]: thread },
+		_progression = nil :: any,
+		_data = nil :: any,
+		_matchStartedAt = nil :: number?,
+		_playerRoundsWon = {} :: { [number]: number },
 	}, MatchService)
 	return self
 end
@@ -67,6 +71,14 @@ end
 
 function MatchService:SetMapService(mapService: any)
 	self._maps = mapService
+end
+
+function MatchService:SetProgressionService(progression: any)
+	self._progression = progression
+end
+
+function MatchService:SetDataService(dataService: any)
+	self._data = dataService
 end
 
 function MatchService:Init()
@@ -491,6 +503,8 @@ function MatchService:_startMatch(fillWithBots: boolean)
 
 	self._scoreA = 0
 	self._scoreB = 0
+	self._matchStartedAt = Workspace:GetServerTimeNow()
+	self._playerRoundsWon = {}
 	self._roundNumber = 0
 
 	local botCount = 0
@@ -619,6 +633,7 @@ function MatchService:_finishMatch()
 			winner = if self._scoreA >= self._scoreB then "A" else "B"
 		end
 	end
+	self._matchWinner = winner
 	self._remotes.MatchResult:FireAllClients({
 		Winner = winner,
 		ScoreA = self._scoreA,
@@ -627,10 +642,11 @@ function MatchService:_finishMatch()
 	})
 	self:_broadcastSnapshot()
 
-	-- Recap stub (Tokens/XP placeholders until Phase 4)
+	-- Phase 4: grant Tokens / XP / Pass XP / contracts, then recap with real numbers
+	local grantByUser = self:_applyProgressionGrants(winner)
 	self._phase = "MatchRecap"
 	self._phaseEndsAt = Workspace:GetServerTimeNow() + (MatchSettings.MatchRecapSeconds or 8)
-	local entries = self:_buildRecapEntries()
+	local entries = self:_buildRecapEntries(grantByUser)
 	if self._remotes.MatchRecap then
 		self._remotes.MatchRecap:FireAllClients({
 			ModeId = self._modeId,
@@ -638,8 +654,6 @@ function MatchService:_finishMatch()
 			ScoreA = self._scoreA,
 			ScoreB = self._scoreB,
 			Entries = entries,
-			Tokens = 0, -- Phase 4
-			XP = 0, -- Phase 4
 		})
 	end
 	self:_broadcastSnapshot()
@@ -647,12 +661,73 @@ function MatchService:_finishMatch()
 	self:_endToLobby()
 end
 
-function MatchService:_buildRecapEntries(): { any }
+function MatchService:_playerWon(actor: Actor, winner: string): boolean
+	local cfg = self:_getMode()
+	local uid = ActorUtil.UserId(actor)
+	if cfg.IsFFA or cfg.WinType == "GunCycle" or cfg.WinType == "Eliminations" then
+		return tostring(uid) == winner
+	end
+	local team = ActorUtil.GetAttribute(actor, Constants.AttributeTeam)
+	return typeof(team) == "string" and team == winner
+end
+
+function MatchService:_applyProgressionGrants(winner: string): { [number]: any }
+	local grantByUser: { [number]: any } = {}
+	if not self._progression then
+		return grantByUser
+	end
+	local stats = self._weapons:GetMatchStats()
+	local started = self._matchStartedAt or Workspace:GetServerTimeNow()
+	local duration = math.max(0, Workspace:GetServerTimeNow() - started)
+	local participants = {}
+	for _, actor in self:_allMatchActors() do
+		if ActorUtil.IsBot(actor) then
+			continue
+		end
+		local uid = ActorUtil.UserId(actor)
+		local player = Players:GetPlayerByUserId(uid)
+		if not player then
+			continue
+		end
+		local s = stats[uid] or { Kills = 0, Deaths = 0, Damage = 0 }
+		local won = self:_playerWon(actor, winner)
+		local roundsWon = self._playerRoundsWon[uid]
+		if roundsWon == nil then
+			-- Approximate: team round score if on winning/losing side
+			local team = ActorUtil.GetAttribute(actor, Constants.AttributeTeam)
+			if team == "A" then
+				roundsWon = self._scoreA
+			elseif team == "B" then
+				roundsWon = self._scoreB
+			else
+				roundsWon = if won then 1 else 0
+			end
+		end
+		table.insert(participants, {
+			UserId = uid,
+			Player = player,
+			Won = won,
+			Kills = s.Kills or 0,
+			Deaths = s.Deaths or 0,
+			Damage = s.Damage or 0,
+			RoundsWon = roundsWon,
+			MatchDurationSec = duration,
+			AbilityUses = 0,
+			Headshots = 0,
+		})
+	end
+	grantByUser = self._progression:GrantForMatch(self._modeId, participants)
+	return grantByUser
+end
+
+function MatchService:_buildRecapEntries(grantByUser: { [number]: any }?): { any }
 	local entries = {}
 	local stats = self._weapons:GetMatchStats()
+	local grants = grantByUser or {}
 	for _, actor in self:_allMatchActors() do
 		local uid = ActorUtil.UserId(actor)
 		local s = stats[uid] or { Kills = 0, Deaths = 0, Damage = 0 }
+		local g = grants[uid]
 		table.insert(entries, {
 			UserId = uid,
 			DisplayName = ActorUtil.DisplayName(actor),
@@ -663,8 +738,9 @@ function MatchService:_buildRecapEntries(): { any }
 			Damage = math.floor(s.Damage + 0.5),
 			Elims = self._elimScores[uid] or s.Kills,
 			GunIndex = self._gunIndex[uid],
-			Tokens = 0,
-			XP = 0,
+			Tokens = if g then g.Tokens else 0,
+			XP = if g then g.XP else 0,
+			PassXp = if g then g.PassXp else 0,
 		})
 	end
 	table.sort(entries, function(a, b)

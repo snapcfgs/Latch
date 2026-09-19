@@ -45,6 +45,20 @@ local RemoteNames = {
 	-- Lobby / modes / recap (Phase 3)
 	"MatchRecap",
 	"RequestLeaveQueue",
+	-- Progression / economy (Phase 4)
+	"ProfileSync",
+	"RequestProfile",
+	"ShopBuy",
+	"ShopResult",
+	"OpenCase",
+	"EquipCosmetic",
+	"PassClaim",
+	"PassResult",
+	"ContractClaim",
+	"ContractRefresh",
+	"ContractResult",
+	"DebugGrant",
+	"PromptPurchase",
 }
 
 

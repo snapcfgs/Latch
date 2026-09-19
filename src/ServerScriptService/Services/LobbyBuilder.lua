@@ -68,10 +68,18 @@ local function billboard(adornee: BasePart, text: string, color: Color3?)
 	c.Parent = t
 end
 
-local function kiosk(parent: Instance, name: string, pos: Vector3, label: string, color: Color3)
+local function kiosk(parent: Instance, name: string, pos: Vector3, label: string, color: Color3, kioskType: string)
 	local base = part(parent, name, Vector3.new(6, 4, 4), CFrame.new(pos + Vector3.new(0, 2, 0)), color, Enum.Material.SmoothPlastic)
 	base:SetAttribute("KioskStub", true)
+	base:SetAttribute("KioskType", kioskType)
 	billboard(base, label, Color3.new(1, 1, 1))
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Open " .. label
+	prompt.ObjectText = "Latch"
+	prompt.HoldDuration = 0.15
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = base
 	return base
 end
 
@@ -112,9 +120,9 @@ function LobbyBuilder.Build(): Folder
 	local kiosks = Instance.new("Folder")
 	kiosks.Name = "Kiosks"
 	kiosks.Parent = arena
-	kiosk(kiosks, "ShopKiosk", Vector3.new(-28, 0, -18), "Shop (soon)", Color3.fromRGB(80, 160, 120))
-	kiosk(kiosks, "PassKiosk", Vector3.new(-28, 0, 0), "Pass (soon)", Color3.fromRGB(160, 120, 200))
-	kiosk(kiosks, "ContractBoard", Vector3.new(-28, 0, 18), "Contracts (soon)", Color3.fromRGB(200, 140, 80))
+	kiosk(kiosks, "ShopKiosk", Vector3.new(-28, 0, -18), "Shop", Color3.fromRGB(80, 160, 120), "Shop")
+	kiosk(kiosks, "PassKiosk", Vector3.new(-28, 0, 0), "Battle Pass", Color3.fromRGB(160, 120, 200), "Pass")
+	kiosk(kiosks, "ContractBoard", Vector3.new(-28, 0, 18), "Contracts", Color3.fromRGB(200, 140, 80), "Contracts")
 
 	-- Leaderboard wall stub (east)
 	local lb = part(arena, "LeaderboardWall", Vector3.new(2, 12, 22), CFrame.new(55, 6, 0), Color3.fromRGB(35, 40, 55), Enum.Material.Metal)

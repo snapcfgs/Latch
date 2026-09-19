@@ -1,12 +1,13 @@
 --!strict
 --[[
-	LoadoutController — simple Phase 2 loadout picker (1 primary + 1 secondary + 1 melee + 1 utility).
-	Phase 4 will gate unlocks with Tokens; for now ALL weapons are selectable (Studio unlock-all).
+	LoadoutController — loadout picker gated by UnlockedWeapons (Phase 4).
+	Starters unlocked; others need Tokens (shop) or Debug Grant.
 ]]
 
 local Players = game:GetService("Players")
 
 local WeaponsConfig = require(game.ReplicatedStorage.Config.Weapons)
+local Monetization = require(game.ReplicatedStorage.Config.Monetization)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -25,6 +26,10 @@ function LoadoutController.new(remotes: { [string]: RemoteEvent })
 			Utility = WeaponsConfig.DefaultLoadout.Utility,
 		},
 		_visible = true,
+		_profile = nil :: any,
+		_title = nil :: TextLabel?,
+		_note = nil :: TextLabel?,
+		_scroll = nil :: ScrollingFrame?,
 	}, LoadoutController)
 	return self
 end
@@ -39,6 +44,39 @@ function LoadoutController:Init()
 		local show = phase == "Lobby" or phase == "OperatorLock" or phase == "MatchEnd"
 		self:_setVisible(show)
 	end)
+	if self._remotes.ProfileSync then
+		self._remotes.ProfileSync.OnClientEvent:Connect(function(profile)
+			self._profile = profile
+			if typeof(profile) == "table" and typeof(profile.EquippedLoadout) == "table" then
+				local el = profile.EquippedLoadout
+				if typeof(el.Primary) == "string" then
+					self._selection.Primary = el.Primary
+				end
+				if typeof(el.Secondary) == "string" then
+					self._selection.Secondary = el.Secondary
+				end
+				if typeof(el.Melee) == "string" then
+					self._selection.Melee = el.Melee
+				end
+				if typeof(el.Utility) == "string" then
+					self._selection.Utility = el.Utility
+				end
+			end
+			self:_rebuildButtons()
+		end)
+	end
+end
+
+function LoadoutController:_isUnlocked(weaponId: string): boolean
+	if self._profile and typeof(self._profile.UnlockedWeapons) == "table" then
+		return self._profile.UnlockedWeapons[weaponId] == true
+	end
+	for _, id in Monetization.StarterWeapons do
+		if id == weaponId then
+			return true
+		end
+	end
+	return false
 end
 
 function LoadoutController:_setVisible(v: boolean)
@@ -54,19 +92,80 @@ function LoadoutController:_send()
 	end
 end
 
-function LoadoutController:_refreshSlotColors(scroll: ScrollingFrame, slot: string)
+function LoadoutController:_rebuildButtons()
+	local scroll = self._scroll
+	if not scroll then
+		return
+	end
 	for _, child in scroll:GetChildren() do
-		if child:IsA("TextButton") then
-			local label = string.gsub(child.Text, "^%s+", "")
-			for _, oid in WeaponsConfig.GetBySlot(slot :: any) do
-				local ocfg = WeaponsConfig.Weapons[oid]
-				if ocfg.DisplayName == label then
-					child.BackgroundColor3 = if self._selection[slot] == oid
-						then Color3.fromRGB(50, 90, 70)
-						else Color3.fromRGB(36, 42, 56)
-				end
-			end
+		if child:IsA("GuiObject") then
+			child:Destroy()
 		end
+	end
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = scroll
+
+	local function addSlot(slot: string)
+		local header = Instance.new("TextLabel")
+		header.BackgroundTransparency = 1
+		header.Size = UDim2.new(1, 0, 0, 18)
+		header.Font = Enum.Font.GothamBold
+		header.TextSize = 13
+		header.TextColor3 = Color3.fromRGB(120, 200, 255)
+		header.TextXAlignment = Enum.TextXAlignment.Left
+		header.Text = slot
+		header.Parent = scroll
+
+		for _, id in WeaponsConfig.GetBySlot(slot :: any) do
+			local cfg = WeaponsConfig.Weapons[id]
+			local unlocked = self:_isUnlocked(id)
+			local price = Monetization.WeaponPrices[id]
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, 0, 0, 28)
+			btn.BackgroundColor3 = if self._selection[slot] == id
+				then Color3.fromRGB(50, 90, 70)
+				elseif unlocked then Color3.fromRGB(36, 42, 56)
+				else Color3.fromRGB(28, 28, 34)
+			btn.TextColor3 = if unlocked then Color3.new(1, 1, 1) else Color3.fromRGB(120, 120, 130)
+			btn.Font = Enum.Font.Gotham
+			btn.TextSize = 13
+			btn.TextXAlignment = Enum.TextXAlignment.Left
+			if unlocked then
+				btn.Text = "  " .. cfg.DisplayName
+			else
+				btn.Text = string.format("  🔒 %s (%s)", cfg.DisplayName, if price then (tostring(price) .. " Tok") else "locked")
+			end
+			btn.AutoButtonColor = unlocked
+			btn.Parent = scroll
+			local bc = Instance.new("UICorner")
+			bc.CornerRadius = UDim.new(0, 6)
+			bc.Parent = btn
+
+			btn.MouseButton1Click:Connect(function()
+				if not self:_isUnlocked(id) then
+					if self._note then
+						self._note.Text = "Locked — buy in Shop or Debug Grant"
+					end
+					return
+				end
+				self._selection[slot] = id
+				self:_rebuildButtons()
+				self:_send()
+			end)
+		end
+	end
+
+	for _, slot in WeaponsConfig.SlotOrder do
+		addSlot(slot)
+	end
+
+	if self._title then
+		self._title.Text = "Loadout"
+	end
+	if self._note then
+		local tokens = if self._profile then tonumber(self._profile.Tokens) or 0 else 0
+		self._note.Text = string.format("Tokens %d · locked guns need Shop / Debug", tokens)
 	end
 end
 
@@ -102,8 +201,9 @@ function LoadoutController:_build()
 	title.TextSize = 16
 	title.TextColor3 = Color3.new(1, 1, 1)
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Text = "Loadout (unlock-all)"
+	title.Text = "Loadout"
 	title.Parent = panel
+	self._title = title
 
 	local note = Instance.new("TextLabel")
 	note.BackgroundTransparency = 1
@@ -113,8 +213,9 @@ function LoadoutController:_build()
 	note.TextSize = 11
 	note.TextColor3 = Color3.fromRGB(180, 190, 200)
 	note.TextXAlignment = Enum.TextXAlignment.Left
-	note.Text = "Phase 4 will gate unlocks with Tokens"
+	note.Text = "Unlocks gated by Tokens"
 	note.Parent = panel
+	self._note = note
 
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.BackgroundTransparency = 1
@@ -125,52 +226,7 @@ function LoadoutController:_build()
 	scroll.CanvasSize = UDim2.fromOffset(0, 0)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.Parent = panel
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 6)
-	layout.Parent = scroll
-
-	local function addSlot(slot: string)
-		local header = Instance.new("TextLabel")
-		header.BackgroundTransparency = 1
-		header.Size = UDim2.new(1, 0, 0, 18)
-		header.Font = Enum.Font.GothamBold
-		header.TextSize = 13
-		header.TextColor3 = Color3.fromRGB(120, 200, 255)
-		header.TextXAlignment = Enum.TextXAlignment.Left
-		header.Text = slot
-		header.Parent = scroll
-
-		for _, id in WeaponsConfig.GetBySlot(slot :: any) do
-			local cfg = WeaponsConfig.Weapons[id]
-			local btn = Instance.new("TextButton")
-			btn.Size = UDim2.new(1, 0, 0, 28)
-			btn.BackgroundColor3 = Color3.fromRGB(36, 42, 56)
-			btn.TextColor3 = Color3.new(1, 1, 1)
-			btn.Font = Enum.Font.Gotham
-			btn.TextSize = 13
-			btn.TextXAlignment = Enum.TextXAlignment.Left
-			btn.Text = "  " .. cfg.DisplayName
-			btn.AutoButtonColor = true
-			btn.Parent = scroll
-			local bc = Instance.new("UICorner")
-			bc.CornerRadius = UDim.new(0, 6)
-			bc.Parent = btn
-
-			if self._selection[slot] == id then
-				btn.BackgroundColor3 = Color3.fromRGB(50, 90, 70)
-			end
-
-			btn.MouseButton1Click:Connect(function()
-				self._selection[slot] = id
-				self:_refreshSlotColors(scroll, slot)
-				self:_send()
-			end)
-		end
-	end
-
-	for _, slot in WeaponsConfig.SlotOrder do
-		addSlot(slot)
-	end
+	self._scroll = scroll
 
 	local apply = Instance.new("TextButton")
 	apply.Size = UDim2.new(1, -16, 0, 32)
@@ -186,15 +242,18 @@ function LoadoutController:_build()
 	ac.Parent = apply
 	apply.MouseButton1Click:Connect(function()
 		self:_send()
-		title.Text = string.format(
-			"%s / %s / %s / %s",
-			WeaponsConfig.Weapons[self._selection.Primary :: any].DisplayName,
-			WeaponsConfig.Weapons[self._selection.Secondary :: any].DisplayName,
-			WeaponsConfig.Weapons[self._selection.Melee :: any].DisplayName,
-			WeaponsConfig.Weapons[self._selection.Utility :: any].DisplayName
-		)
+		if self._title then
+			self._title.Text = string.format(
+				"%s / %s / %s / %s",
+				WeaponsConfig.Weapons[self._selection.Primary :: any].DisplayName,
+				WeaponsConfig.Weapons[self._selection.Secondary :: any].DisplayName,
+				WeaponsConfig.Weapons[self._selection.Melee :: any].DisplayName,
+				WeaponsConfig.Weapons[self._selection.Utility :: any].DisplayName
+			)
+		end
 	end)
 
+	self:_rebuildButtons()
 	task.defer(function()
 		self:_send()
 	end)

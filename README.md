@@ -100,7 +100,7 @@ Six original code-built arenas (Parts only, no `.rbxm`):
 2. **Map vote** — 3 random maps, **8s**; bots vote for variety; last-played down-weighted
 3. Winning map loads via `MapService` (lobby `LatchArena` parked)
 4. **Operator + loadout lock** — **8s**
-5. Countdown → rounds / continuous match → **match recap** (K/D, damage; Tokens/XP stubs) → lobby
+5. Countdown → rounds / continuous match → **match recap** (K/D, damage, Tokens/XP) → lobby
 
 ### How to test
 1. `rojo serve` + Play Solo
@@ -134,7 +134,7 @@ Default loadout: **Pulse AR / Sidearm / Blade / Frag**.
 6. **Stim Cap**: equip utility + fire — +30 HP over 2s, **1/round** (refill resets).
 7. Bots pick random loadouts and fire their equipped primary; kill feed / hitmarkers include bot names.
 
-Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. Loadout UI: `LoadoutController` (Phase 4 Token gates later).
+Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. Loadout UI: `LoadoutController` (Token unlock gates).
 
 
 ## Phase 3 — Modes, lobby, pads, menu queue
@@ -166,6 +166,56 @@ Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. 
 3. Confirm bot fill → map vote → 8s operator lock → match → recap → lobby
 4. FFA: confirm 3s respawn and first-to-7; Gun Cycle: weapon advances on elim
 
+
+
+## Phase 4 — Progression, shop, battle pass, contracts
+
+### Currencies
+| Currency | Use |
+|----------|-----|
+| **Latch Tokens** | Buy weapons / skins / wraps in Shop |
+| **Scrap** | From case duplicates (sink TBD) |
+| **Pass XP** | Battle Pass tiers (not account XP) |
+| **Account XP** | Levels (`Monetization.LevelXpRequired` = 100) |
+| **Skin Tickets** | Open Skin Case Alpha / Beta |
+
+### Match grants (`ProgressionService`)
+- **Win** 25 Tokens + 50 XP · **Loss** 10 Tokens + 25 XP
+- +2 Tokens/kill (cap +20) · +5 XP/kill · +1 XP per 50 damage
+- Stats + daily contract progress updated on match end
+
+### Battle Pass — Season 01 "Live Wire"
+- **20 Pass XP = 1 tier** (40 tiers, Free + Prime tracks)
+- Per match Pass XP: **+1 per round won** (round modes) **or +1 per elim** (FFA/TDM/Gun Cycle), plus **+1 per 45s** of match time (cap +20/match)
+- Roughly: **20 round wins ≈ 1 tier**, or **~15 minutes** of continuous play ≈ 1 tier
+
+### Contracts
+- 3 dailies from `Config/Contracts.lua`
+- **Live (DataStore):** refresh on UTC day change
+- **Studio / in-memory:** refresh after **30 minutes** or new session (`Contracts.StudioRefreshSeconds`)
+
+### Monetization
+- `Config/Monetization.lua` → **`IS_MONETIZATION_LIVE = false`**
+- No real Robux `Prompt*` charges while false
+- Studio **Shop → Debug** tab (or DebugGrant remote):
+  - **Starter Bundle** — Coil SMG + Neon Coil skin + 200 Tokens
+  - Unlock all weapons / Tokens / Skin Tickets / Prime Pass / Pass XP / free case open
+
+### How to test
+1. `rojo serve` + Play Solo
+2. Queue **1v1** — finish a match → recap shows **Tokens / XP** > 0; profile syncs
+3. Open **Shop** (kiosk west side, or lobby menu **Shop** button) → Debug → Starter Bundle / Unlock all
+4. **Loadout** — locked guns show 🔒 until unlocked; starters always available
+5. **Pass** kiosk — claim free tiers after Pass XP; Debug → Prime + Pass XP to test Prime track
+6. **Contracts** kiosk — progress after matches; claim when complete
+7. Cases: grant Skin Tickets (Debug) → Cases tab → open (pity: Rare+ by 10th open; duplicates → Scrap)
+
+### Config / services
+- Config: `Cosmetics.lua`, `BattlePass.lua`, `Contracts.lua`, `Monetization.lua`
+- Server: `DataService`, `ProgressionService`, `ShopService`, `PassService`, `ContractService`, `MonetizationService`
+- Client: `ShopController`, `PassController`, `ContractController`, `ViewmodelController` (recolor stub)
+- Remotes: `ProfileSync`, `RequestProfile`, `ShopBuy`, `ShopResult`, `OpenCase`, `EquipCosmetic`, `PassClaim`, `PassResult`, `ContractClaim`, `ContractRefresh`, `ContractResult`, `DebugGrant`, `PromptPurchase`
+
 ## Architecture
 
 - Custom bootstrap (no Knit): `Bootstrap.server.lua` / `Bootstrap.client.lua`
@@ -181,7 +231,7 @@ Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. 
 - Bot AI is competent but not tournament-level (no grenade throws / advanced peeks yet)
 - Splice blocks **movement** for everyone; only **bullets** are one-way for allies
 - Anchor explosive resistance is an attribute stub (no knockback system yet)
-- Ranked / ELO still later; Tokens/XP economy is Phase 4
+- Ranked / ELO still later
 - First-person zoom lock is a simple camera distance clamp
 - Lobby bot “emotes” are Billboard stubs
 
