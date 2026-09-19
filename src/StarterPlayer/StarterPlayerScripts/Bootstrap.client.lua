@@ -6,6 +6,7 @@
 
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 
 local Remotes = require(game.ReplicatedStorage.Shared.Remotes)
 
@@ -17,7 +18,6 @@ local AbilityController = require(Controllers.AbilityController)
 local HUDController = require(Controllers.HUDController)
 local OperatorSelectController = require(Controllers.OperatorSelectController)
 
--- Prefer shift-lock free look; hide default backpack
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 end)
@@ -42,17 +42,54 @@ hud:Init()
 local opSelect = OperatorSelectController.new(remotes)
 opSelect:Init()
 
--- Default camera
 local player = Players.LocalPlayer
 player.CameraMode = Enum.CameraMode.Classic
-local function lockFirstPerson()
-	player.CameraMaxZoomDistance = 0.5
-	player.CameraMinZoomDistance = 0.5
+
+-- Lobby: free cursor for UI clicks. Match: first-person mouse look.
+local inCombat = false
+
+local function setCombatCamera(combat: boolean)
+	inCombat = combat
+	if combat then
+		player.CameraMinZoomDistance = 0.5
+		player.CameraMaxZoomDistance = 0.5
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseIconEnabled = false
+	else
+		player.CameraMinZoomDistance = 8
+		player.CameraMaxZoomDistance = 24
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+	end
 end
-lockFirstPerson()
+
+setCombatCamera(false)
+
 player.CharacterAdded:Connect(function()
 	task.wait(0.1)
-	lockFirstPerson()
+	setCombatCamera(inCombat)
+end)
+
+remotes.MatchSnapshot.OnClientEvent:Connect(function(snap)
+	if typeof(snap) ~= "table" then
+		return
+	end
+	local phase = snap.Phase
+	if phase == "Lobby" or phase == "MatchEnd" then
+		setCombatCamera(false)
+	elseif phase == "Countdown" or phase == "Round" or phase == "RoundEnd" then
+		setCombatCamera(true)
+	else
+		setCombatCamera(false)
+	end
+end)
+
+-- Esc frees the mouse (handy in Studio playtests)
+UserInputService.InputBegan:Connect(function(inputObj, _processed)
+	if inputObj.KeyCode == Enum.KeyCode.Escape then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+	end
 end)
 
 print("[Latch] Client bootstrap complete — touch=", input:IsTouch())
