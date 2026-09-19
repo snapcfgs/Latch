@@ -15,6 +15,9 @@ local MatchSettings = {
 	FillTimer1v1Seconds = 3,
 	FillTimer2v2Seconds = 4,
 
+	-- Map vote window after queue fills (Phase 1)
+	MapVoteSeconds = 8,
+
 	-- Lobby ambient bots (not in match)
 	LobbyBotMin = 6,
 	LobbyBotMax = 12,

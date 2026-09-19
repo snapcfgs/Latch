@@ -171,6 +171,9 @@ function HUDController:_refresh()
 		local phase = snap.Phase or "Lobby"
 		local round = snap.RoundNumber or 0
 		local text = string.upper(tostring(phase)) .. (if round > 0 then ("  R" .. tostring(round)) else "")
+		if typeof(snap.CurrentMapId) == "string" and (snap.CurrentMapId :: string) ~= "" then
+			text = text .. "  ·  " .. (snap.CurrentMapId :: string)
+		end
 		if phase == "Lobby" and typeof(snap.FillEndsAt) == "number" then
 			local remain = (snap.FillEndsAt :: number) - Workspace:GetServerTimeNow()
 			if remain > 0 then

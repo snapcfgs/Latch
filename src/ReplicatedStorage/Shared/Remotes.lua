@@ -34,6 +34,11 @@ local RemoteNames = {
 	-- Bots / stand-ins
 	"Announce",
 	"StandInReplaced",
+	-- Maps / vote (Phase 1)
+	"MapVoteStart",
+	"MapVoteCast",
+	"MapVoteUpdate",
+	"MapVoteResult",
 }
 
 export type RemotesMap = { [string]: RemoteEvent }

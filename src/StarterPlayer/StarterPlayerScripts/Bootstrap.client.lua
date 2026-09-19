@@ -18,6 +18,7 @@ local WeaponController = require(Controllers.WeaponController)
 local AbilityController = require(Controllers.AbilityController)
 local HUDController = require(Controllers.HUDController)
 local OperatorSelectController = require(Controllers.OperatorSelectController)
+local MapVoteController = require(Controllers.MapVoteController)
 
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
@@ -42,6 +43,9 @@ hud:Init()
 
 local opSelect = OperatorSelectController.new(remotes)
 opSelect:Init()
+
+local mapVote = MapVoteController.new(remotes)
+mapVote:Init()
 
 local player = Players.LocalPlayer
 player.CameraMode = Enum.CameraMode.Classic
@@ -77,7 +81,7 @@ remotes.MatchSnapshot.OnClientEvent:Connect(function(snap)
 		return
 	end
 	local phase = snap.Phase
-	if phase == "Lobby" or phase == "MatchEnd" then
+	if phase == "Lobby" or phase == "MatchEnd" or phase == "MapVote" then
 		setCombatCamera(false)
 	elseif phase == "Countdown" or phase == "Round" or phase == "RoundEnd" then
 		setCombatCamera(true)

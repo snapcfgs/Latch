@@ -78,6 +78,34 @@ Same rules and netcode; only the input surface changes.
 
 Balance numbers live in `src/ReplicatedStorage/Config/`.
 
+
+## Phase 1 — Maps & map vote
+
+Six original code-built arenas (Parts only, no `.rbxm`):
+
+| Map | Size | Feel |
+|-----|------|------|
+| **Splityard** | Small | Twin warehouses, mid crate lane |
+| **Voltage** | Small | Neon rooftops, thin bridges |
+| **Hollow** | Medium | Indoor atrium + mezzanines (Splice-friendly) |
+| **Dredge** | Medium | Dry dock / shipping — long AR lines + tight corridors |
+| **Glassline** | Medium | Office atrium, non-breakable glass Parts |
+| **Ridge** | Large | Outdoor canyon (room for 3v3/4v4 later) |
+
+### Match flow
+1. Queue fills (humans and/or bot fill timers from Phase 0)
+2. **Map vote** — 3 random maps, **8s** timer; bots vote weighted toward variety; last-played map is less likely
+3. Winning map loads via `MapService` (lobby `LatchArena` is parked)
+4. Existing countdown → rounds → match end → return to lobby
+
+### How to test
+1. `rojo serve` + Play Solo
+2. Queue 1v1 — after fill, vote UI appears (3 buttons + timer). Click a map or let bots decide.
+3. Confirm spawn pads, cover, and kill floor on each map (re-queue to roll different offerings; last map is down-weighted).
+4. Bots should roam match waypoints/cover nodes; lobby wanderers return after match end.
+
+Config: `Config/Maps.lua`, `MatchSettings.MapVoteSeconds`. Remotes: `MapVoteStart` / `MapVoteCast` / `MapVoteUpdate` / `MapVoteResult`.
+
 ## Architecture
 
 - Custom bootstrap (no Knit): `Bootstrap.server.lua` / `Bootstrap.client.lua`
@@ -85,7 +113,8 @@ Balance numbers live in `src/ReplicatedStorage/Config/`.
 - **BotService** drives AI stand-ins through the same `WeaponService:ServerFire` / `AbilityService:ServerUse` paths as players (`ActorUtil` unifies Player | BotRecord)
 - Hitscan guns use server raycasts; Splice panels pierce for allies (see comments in `AbilityService`)
 - VFX: Parts / Beams / Highlights only — budget helpers in `Util/VFX.lua`
-- Arena waypoints: `ArenaBuilder` places an invisible grid for bot pathing
+- Lobby arena: `ArenaBuilder` (waypoints for lobby bots)
+- Match arenas: `MapService` + `Services/Maps/*` (spawns, cover tags, bot waypoints/cover nodes, lighting, kill floor)
 
 ## Known MVP gaps
 

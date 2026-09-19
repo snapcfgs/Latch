@@ -76,12 +76,9 @@ Each: `Id`, `DisplayName`, `ActiveAbility`, `Passive`, cooldowns, simple VFX hoo
 - Short lifetimes; pool/reuse where easy
 - No camera shake spam, no full-screen bloom
 
-## Map (MVP)
-One mirrored small arena:
-- Two identical spawn sides
-- Mid cover blocks, one high platform each side, clear sightlines for AR + close corners for shotgun later
-- Build with Parts in Workspace or a Module that constructs the map on server start
-- Name spawn locations clearly (`SpawnA`, `SpawnB`)
+## Maps (Phase 1)
+Six code-generated Parts arenas via `MapService` / `Services/Maps/*` (see Phase 1 section below).
+Lobby keeps a simple `ArenaBuilder` space for ambient bots. Match loads a voted map with SpawnA/SpawnB, cover tags, bot nav nodes, kill floor, and lighting.
 
 ## UI (MVP)
 - Crosshair
@@ -140,3 +137,35 @@ Solo Studio Play is a real first-to-5 match vs AI bots (not empty-team practice)
 
 ### Remotes added
 - `Announce`, `StandInReplaced` (via `Remotes.lua` only)
+
+
+## Phase 1 — Maps & map vote (implemented)
+
+### Map registry
+- `Config/Maps.lua` — Id, DisplayName, SizeClass (Small/Medium/Large), ThumbnailColor, Description, Lighting hints
+
+### MapService
+- Load/clear `LatchMap`, park/restore lobby `LatchArena`
+- Apply lighting (ClockTime, Fog, Ambient)
+- Expose SpawnA/SpawnB, Waypoints, CoverNodes for bots
+- KillFloor touch → Humanoid death
+- Map vote: pick 3 options (last-played down-weighted), 8s window, bot votes favor variety, persist last map in server memory
+
+### Maps (original names only — Parts geometry)
+1. Splityard (Small)
+2. Voltage (Small)
+3. Hollow (Medium)
+4. Dredge (Medium)
+5. Glassline (Medium) — non-breakable glass Parts
+6. Ridge (Large)
+
+Each map includes mirrored SpawnA/SpawnB (extras for future 3v3+), Cover / HighGround / Chokepoint tags, bot waypoints + cover nodes, kill floor, lighting hints.
+
+### Match flow change
+Queue fill → **MapVote** → Countdown → Round… → MatchEnd → lobby (map cleared)
+
+### Remotes added
+- `MapVoteStart`, `MapVoteCast`, `MapVoteUpdate`, `MapVoteResult` (via `Remotes.lua` only)
+
+### Client
+- `MapVoteController` — 3 buttons + timer; mouse unlocked during MapVote

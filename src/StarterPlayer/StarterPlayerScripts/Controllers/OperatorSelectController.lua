@@ -27,7 +27,7 @@ function OperatorSelectController:Init()
 			return
 		end
 		local phase = snap.Phase
-		local show = phase == "Lobby" or phase == "MatchEnd"
+		local show = phase == "Lobby" or phase == "MatchEnd" -- hidden during MapVote / match
 		self:_setVisible(show)
 	end)
 end

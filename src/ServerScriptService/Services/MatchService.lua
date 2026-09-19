@@ -16,7 +16,7 @@ local ActorUtil = require(script.Parent.ActorUtil)
 
 type Actor = ActorUtil.Actor
 type BotRecord = ActorUtil.BotRecord
-type Phase = "Lobby" | "Countdown" | "Round" | "RoundEnd" | "MatchEnd"
+type Phase = "Lobby" | "MapVote" | "Countdown" | "Round" | "RoundEnd" | "MatchEnd"
 
 local MatchService = {}
 MatchService.__index = MatchService
@@ -32,6 +32,8 @@ function MatchService.new(
 		_weapons = weaponService,
 		_abilities = abilityService,
 		_bots = botService,
+		_maps = nil :: any,
+		_currentMapId = nil :: string?,
 		_phase = "Lobby" :: Phase,
 		_modeId = MatchSettings.DefaultModeId,
 		_scoreA = 0,
@@ -51,6 +53,10 @@ end
 
 function MatchService:SetBotService(botService: any)
 	self._bots = botService
+end
+
+function MatchService:SetMapService(mapService: any)
+	self._maps = mapService
 end
 
 function MatchService:Init()
@@ -124,6 +130,7 @@ function MatchService:_broadcastSnapshot()
 
 	local snap = {
 		Phase = self._phase,
+		CurrentMapId = self._currentMapId,
 		ModeId = self._modeId,
 		RoundNumber = self._roundNumber,
 		ScoreA = self._scoreA,
@@ -361,6 +368,24 @@ function MatchService:_startMatch(fillWithBots: boolean)
 		})
 	end
 
+	-- Phase 1: map vote then load arena
+	self._phase = "MapVote"
+	self._phaseEndsAt = Workspace:GetServerTimeNow() + (MatchSettings.MapVoteSeconds or 8)
+	self:_broadcastSnapshot()
+	local mapId = "Splityard"
+	if self._maps then
+		mapId = self._maps:RunMapVote(botCount)
+		self._maps:LoadMap(mapId)
+		self._currentMapId = mapId
+		if self._bots and self._bots.RefreshNav then
+			self._bots:RefreshNav()
+		end
+		self._remotes.Announce:FireAllClients({
+			Kind = "MapSelected",
+			Message = string.format("Map: %s", mapId),
+		})
+	end
+
 	while self._scoreA < MatchSettings.RoundsToWin and self._scoreB < MatchSettings.RoundsToWin do
 		if #self._teamA + #self._teamB == 0 then
 			break
@@ -401,6 +426,13 @@ function MatchService:_endToLobby()
 	if self._bots then
 		self._bots:DespawnMatchBots()
 		self._bots:SetMatchActive(false)
+	end
+	if self._maps then
+		self._maps:ReturnToLobby()
+	end
+	self._currentMapId = nil
+	if self._bots and self._bots.RefreshNav then
+		self._bots:RefreshNav()
 	end
 	self._phase = "Lobby"
 	self._teamA = {}
@@ -512,9 +544,20 @@ function MatchService:_onActorEliminated(victim: Actor, _attacker: Actor)
 	self:_broadcastSnapshot()
 end
 
+
+function MatchService:_getSpawns(team: string): { SpawnLocation }
+	if self._maps and self._maps:IsMatchMapLoaded() then
+		local spawns = self._maps:GetSpawns(team)
+		if #spawns > 0 then
+			return spawns
+		end
+	end
+	return ArenaBuilder.GetSpawns(team)
+end
+
 function MatchService:_spawnPlayer(player: Player)
 	local team = player:GetAttribute(Constants.AttributeTeam)
-	local spawns = ArenaBuilder.GetSpawns(if team == "B" then "B" else "A")
+	local spawns = self:_getSpawns(if team == "B" then "B" else "A")
 	local spot = spawns[((player.UserId :: number) % math.max(#spawns, 1)) + 1] or spawns[1]
 
 	if not player.Character then

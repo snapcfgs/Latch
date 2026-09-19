@@ -91,8 +91,13 @@ function BotService.new(
 		_matchFolder = nil :: Folder?,
 		_heartbeat = nil :: RBXScriptConnection?,
 		_matchActive = false,
+		_maps = nil :: any,
 	}, BotService)
 	return self
+end
+
+function BotService:SetMapService(mapService: any)
+	self._maps = mapService
 end
 
 function BotService:Init()
@@ -104,8 +109,7 @@ function BotService:Init()
 	self._matchFolder.Name = "LatchMatchBots"
 	self._matchFolder.Parent = Workspace
 
-	ArenaBuilder.EnsureWaypoints()
-	self._waypoints = ArenaBuilder.GetWaypointPositions()
+	self:RefreshNav()
 
 	-- Register victim resolver + kill path for bots
 	self._weapons:SetBotResolver(function(model: Model)
@@ -126,11 +130,42 @@ function BotService:Init()
 	print("[Latch] BotService ready")
 end
 
+
+function BotService:RefreshNav()
+	if self._maps and self._maps:IsMatchMapLoaded() then
+		local nav = self._maps:GetBotNavPositions()
+		if #nav > 0 then
+			self._waypoints = nav
+			return
+		end
+		local wps = self._maps:GetWaypointPositions()
+		if #wps > 0 then
+			self._waypoints = wps
+			return
+		end
+	end
+	ArenaBuilder.EnsureWaypoints()
+	self._waypoints = ArenaBuilder.GetWaypointPositions()
+end
+
+function BotService:_resolveSpawns(teamId: string): { SpawnLocation }
+	if self._maps and self._maps:IsMatchMapLoaded() then
+		local spawns = self._maps:GetSpawns(teamId)
+		if #spawns > 0 then
+			return spawns
+		end
+	end
+	return ArenaBuilder.GetSpawns(teamId)
+end
+
 function BotService:SetMatchActive(active: boolean)
 	self._matchActive = active
 	if active then
 		-- Despawn lobby wanderers during a match to cut clutter
 		self:DespawnLobbyBots()
+	else
+		-- Restore lobby waypoint graph after match map is cleared
+		self:RefreshNav()
 	end
 end
 
@@ -294,7 +329,7 @@ function BotService:SpawnBot(opts: {
 	local root = char:FindFirstChild("HumanoidRootPart") :: BasePart
 	local pos = opts.Position
 	if not pos then
-		local spawns = ArenaBuilder.GetSpawns(opts.TeamId)
+		local spawns = self:_resolveSpawns(opts.TeamId)
 		if #spawns > 0 then
 			local spot = spawns[math.random(1, #spawns)]
 			pos = spot.Position + Vector3.new(0, 3, 0)
@@ -407,7 +442,7 @@ function BotService:RespawnBot(bot: BotRecord, teamId: string)
 	char:SetAttribute(Constants.AttributeOperator, bot.OperatorId)
 	char:SetAttribute(Constants.AttributeAlive, true)
 
-	local spawns = ArenaBuilder.GetSpawns(teamId)
+	local spawns = self:_resolveSpawns(teamId)
 	local spot = if #spawns > 0 then spawns[math.random(1, #spawns)] else nil
 	local root = char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -475,7 +510,7 @@ function BotService:_lobbyDirectorLoop()
 		local target = math.random(MatchSettings.LobbyBotMin, MatchSettings.LobbyBotMax)
 		while lobbyCount < target do
 			local team = if math.random() < 0.5 then "A" else "B"
-			local spawns = ArenaBuilder.GetSpawns(team)
+			local spawns = self:_resolveSpawns(team)
 			local pos: Vector3?
 			if #spawns > 0 then
 				local s = spawns[math.random(1, #spawns)]
@@ -823,7 +858,7 @@ function BotService:_tick(_dt: number)
 	local now = Workspace:GetServerTimeNow()
 	-- Refresh waypoints occasionally if arena rebuilt
 	if #self._waypoints == 0 then
-		self._waypoints = ArenaBuilder.GetWaypointPositions()
+		self:RefreshNav()
 	end
 
 	for id, bot in self._bots do
