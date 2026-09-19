@@ -75,11 +75,13 @@ Same rules and netcode; only the input surface changes.
 | Operator | Active | Passive |
 |----------|--------|---------|
 | **Skid** | Friction dash + trail | Longer slide |
-| **Anchor** | Cover plate (~4s) | Explosive knock resist (stub attribute) |
-| **Splice** | One-way shoot-through panel (~5s) | Quieter crouch (attribute) |
+| **Anchor** | Cover plate (~4s) | Explosive knock resist (self Frag) |
+| **Splice** | One-way panel (~5s) — allies walk **and** shoot through | Quieter crouch |
 | **Jolt** | Mark / Highlight reveal | Faster reload after melee hit |
+| **Fuse** | Sticky delayed pop (sphere damage) | Frag fuse −0.3s |
+| **Warden** | 4s vision pulse (hostiles ≤40 studs) | +10 armor while planted (still 0.6s) |
 
-Balance numbers live in `src/ReplicatedStorage/Config/`.
+Balance numbers live in `src/ReplicatedStorage/Config/Operators.lua`.
 
 
 ## Phase 1 — Maps & map vote
@@ -221,19 +223,43 @@ Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. 
 - Custom bootstrap (no Knit): `Bootstrap.server.lua` / `Bootstrap.client.lua`
 - Server validates damage, fire rate, ability cooldowns, grenade throws
 - **BotService** drives AI stand-ins through the same `WeaponService:ServerFire` / `AbilityService:ServerUse` paths as players (`ActorUtil` unifies Player | BotRecord)
-- Hitscan guns use server raycasts; Splice panels pierce for allies (see comments in `AbilityService`)
+- Hitscan guns use server raycasts; Splice panels: allies walk+shoot through, enemies blocked (CollisionGroups + NoCollisionConstraint — see `AbilityService`)
 - VFX: Parts / Beams / Highlights only — budget helpers in `Util/VFX.lua`
 - Lobby: `LobbyBuilder` / `ArenaBuilder` facade (pads, kiosks, waypoints)
 - Match arenas: `MapService` + `Services/Maps/*` (spawns, cover tags, bot waypoints/cover nodes, lighting, kill floor)
 
+## Phase 5 — Operators + combat/movement polish
+
+### New operators
+- **Fuse** / **Warden** (see table above). Bots pick from full `OperatorOrder`.
+
+### Combat fixes
+- **Splice**: `LatchSpliceEnemy` panel + `NoCollisionConstraint` for allies; hitscan pierce unchanged. Documented in `AbilityService` header.
+- **Anchor**: Frag explosions apply knock; self knock scaled by `LatchExplosiveKnockReduction`.
+- **Viewmodel**: `ViewmodelController` builds a local camera Part (skin/wrap tint) in combat.
+- **Death recap**: `DeathRecap` remote → HUD line e.g. `Nox [Coil SMG] 18m head`.
+
+### Movement
+- Slide cancel into jump (keep momentum)
+- Bunny-hop prevention (`BunnyHopSpeedCap` / chain window)
+- Landing spread penalty **200ms** (`LandingSpreadDegrees`)
+
+### How to test
+1. `rojo serve` + Play Solo — pick Fuse / Warden from operator panel
+2. Fuse: Q sticks a charge → delayed pop; equip Frag and confirm shorter fuse
+3. Warden: Q highlights nearby bots; stand still 0.6s → planted armor (tank a shot)
+4. Splice: ally bot / second client walks through panel; enemies blocked; ally bullets pierce
+5. Anchor + Frag at feet — reduced self knock vs other operators
+6. First-person combat — tinted viewmodel gun visible; die → death recap string
+7. Slide+Jump cancel; spam jump on land → speed capped; fire on land → wider spread briefly
+
 ## Known MVP gaps
 
 - Bot AI is competent but not tournament-level (no grenade throws / advanced peeks yet)
-- Splice blocks **movement** for everyone; only **bullets** are one-way for allies
-- Anchor explosive resistance is an attribute stub (no knockback system yet)
 - Ranked / ELO still later
 - First-person zoom lock is a simple camera distance clamp
 - Lobby bot “emotes” are Billboard stubs
+- Killcam optional (skipped); death recap line only
 
 ## License / assets
 

@@ -3,7 +3,7 @@
 	Operators — active + passive definitions. Cooldown / duration balance here.
 ]]
 
-export type OperatorId = "Skid" | "Anchor" | "Splice" | "Jolt"
+export type OperatorId = "Skid" | "Anchor" | "Splice" | "Jolt" | "Fuse" | "Warden"
 
 export type OperatorConfig = {
 	Id: OperatorId,
@@ -32,6 +32,17 @@ export type OperatorConfig = {
 	MarkRange: number?,
 	MeleeReloadBuffDuration: number?,
 	MeleeReloadMultiplier: number?,
+	-- Fuse
+	StickyDelay: number?,
+	StickyRadius: number?,
+	StickyDamage: number?,
+	StickyMaxRange: number?,
+	FragFuseBonus: number?,
+	-- Warden
+	VisionPulseDuration: number?,
+	VisionPulseRange: number?,
+	PlantedArmor: number?,
+	PlantedStillSeconds: number?,
 }
 
 local Operators: { [OperatorId]: OperatorConfig } = {
@@ -56,7 +67,7 @@ local Operators: { [OperatorId]: OperatorConfig } = {
 		ActiveName = "Cover Plate",
 		ActiveDescription = "Deploy a solid plate for a few seconds.",
 		PassiveName = "Blast Brace",
-		PassiveDescription = "Reduced knock from own explosives (stub).",
+		PassiveDescription = "Reduced knock from own explosives.",
 		Cooldown = 12,
 		CoverSize = Vector3.new(8, 5, 0.6),
 		CoverLifetime = 4,
@@ -67,7 +78,7 @@ local Operators: { [OperatorId]: OperatorConfig } = {
 		DisplayName = "Splice",
 		Description = "One-way panel for creative peeks.",
 		ActiveName = "One-Way Panel",
-		ActiveDescription = "Allies shoot through; enemies blocked.",
+		ActiveDescription = "Allies walk and shoot through; enemies blocked.",
 		PassiveName = "Quiet Step",
 		PassiveDescription = "Quieter footsteps while crouched.",
 		Cooldown = 14,
@@ -88,9 +99,38 @@ local Operators: { [OperatorId]: OperatorConfig } = {
 		MeleeReloadBuffDuration = 3,
 		MeleeReloadMultiplier = 0.65,
 	},
+	Fuse = {
+		Id = "Fuse",
+		DisplayName = "Fuse",
+		Description = "Delayed sticky pops and faster frags.",
+		ActiveName = "Sticky Pop",
+		ActiveDescription = "Fire a sticky charge that detonates after a short delay.",
+		PassiveName = "Short Fuse",
+		PassiveDescription = "Frag fuse time −0.3s.",
+		Cooldown = 11,
+		StickyDelay = 1.15,
+		StickyRadius = 10,
+		StickyDamage = 45,
+		StickyMaxRange = 55,
+		FragFuseBonus = -0.3,
+	},
+	Warden = {
+		Id = "Warden",
+		DisplayName = "Warden",
+		Description = "Hold ground and pulse hostile outlines.",
+		ActiveName = "Vision Pulse",
+		ActiveDescription = "Highlight hostiles within 40 studs for 4s.",
+		PassiveName = "Planted Plate",
+		PassiveDescription = "+10 armor while not moving for 0.6s.",
+		Cooldown = 13,
+		VisionPulseDuration = 4,
+		VisionPulseRange = 40,
+		PlantedArmor = 10,
+		PlantedStillSeconds = 0.6,
+	},
 }
 
-local OperatorOrder: { OperatorId } = { "Skid", "Anchor", "Splice", "Jolt" }
+local OperatorOrder: { OperatorId } = { "Skid", "Anchor", "Splice", "Jolt", "Fuse", "Warden" }
 
 return {
 	Operators = Operators,

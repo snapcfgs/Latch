@@ -18,7 +18,7 @@ export type MatchPhase = "Lobby" | "Countdown" | "Round" | "RoundEnd" | "MatchEn
 
 export type WeaponSlot = "Primary" | "Secondary" | "Melee" | "Utility"
 
-export type OperatorId = "Skid" | "Anchor" | "Splice" | "Jolt"
+export type OperatorId = "Skid" | "Anchor" | "Splice" | "Jolt" | "Fuse" | "Warden"
 
 export type WeaponId = string -- Phase 2 roster; see Config/Weapons.lua
 

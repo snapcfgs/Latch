@@ -37,7 +37,8 @@ aftman.toml / wally.toml if useful
 ## Movement
 - Walk, sprint (or Roblox default run), crouch, **slide** (crouch while sprinting), jump
 - Server-authoritative where it matters; client prediction OK for slide feel
-- Keep explosive jump stubs optional for later; not required in first pass
+- Phase 5 polish: **slide cancel into jump**; **bunny-hop speed cap** (`BunnyHopSpeedCap`); **landing spread penalty** 200ms
+- Frag knock exists; Anchor reduces self knock (not a full explosive-jump kit)
 
 ## Weapons (shared across operators)
 Minimal set — tune later:
@@ -58,18 +59,29 @@ Each: `Id`, `DisplayName`, `ActiveAbility`, `Passive`, cooldowns, simple VFX hoo
 
 ### Anchor
 - Active: deploy a brief cover plate (Part wall, ~4s lifetime, cooldown ~12s)
-- Passive: reduced self-knock from own explosives (stub if explosives limited)
+- Passive: reduced self-knock from own Frag explosions (`LatchExplosiveKnockReduction`)
 - VFX: solid Part spawn/despawn, no particles
 
 ### Splice
-- Active: one-way shoot-through panel (~5s); allies/owner can shoot through, enemies blocked (use CollisionGroup or CanQuery tricks carefully — document approach)
-- Passive: quieter footsteps while crouched (reduce footstep volume / omit client cue)
+- Active: one-way panel (~5s); **allies walk and shoot through**, enemies blocked
+- Collision: panel on `LatchSpliceEnemy` (collides with `LatchPlayers`); allies get `NoCollisionConstraint`; hitscan pierce via `LatchSpliceTeam` attribute (see `AbilityService` header)
+- Passive: quieter footsteps while crouched
 - VFX: semi-transparent Part + simple highlight
 
 ### Jolt
 - Active: sticky mark on hit target — brief outline/highlight through walls (~3s reveal, cooldown ~10s)
 - Passive: slightly faster reload after a melee hit (short buff window)
 - VFX: Highlight instance or simple BillboardGui ping — no lightning particle storms
+
+### Fuse (Phase 5)
+- Active: sticky delayed pop — ray stick, delay ~1.15s, small sphere damage (cooldown ~11s)
+- Passive: Frag fuse time −0.3s (`LatchFragFuseBonus`)
+- VFX: neon sticky Part + explosion sphere
+
+### Warden (Phase 5)
+- Active: vision pulse — Highlight hostiles within 40 studs for 4s (cooldown ~13s)
+- Passive: +10 armor while planted (not moving 0.6s) via `LatchPlantedArmor`
+- VFX: Highlight outlines only
 
 ## Performance rules (enforce in code comments + VFX helpers)
 - Cap concurrent ability VFX instances
@@ -100,7 +112,7 @@ Lobby is a real `LobbyBuilder` space (pads, kiosk stubs, alcove) with ambient bo
 ## Success criteria
 1. Rojo project syncs cleanly; README explains Studio + Rojo workflow
 2. Player can slide, shoot the AR/pistol, melee, throw grenade
-3. Operator select works; each of 4 abilities does something useful and networked
+3. Operator select works; each of 6 abilities does something useful and networked
 4. 1v1 first-to-5 match loop runs with round resets
 5. Arena map exists and is playable
 6. Code is organized, typed (`--!strict` where practical), and comments note VFX budget
@@ -243,3 +255,19 @@ Season 01 "Live Wire", 40 tiers, Free + Prime. **20 Pass XP = 1 tier** (see READ
 ### Remotes added
 `ProfileSync`, `RequestProfile`, `ShopBuy`, `ShopResult`, `OpenCase`, `EquipCosmetic`, `PassClaim`, `PassResult`, `ContractClaim`, `ContractRefresh`, `ContractResult`, `DebugGrant`, `PromptPurchase`
 
+## Phase 5 — Operators + combat/movement polish (implemented)
+
+### Operators
+Fuse + Warden added to `Config/Operators.lua` / AbilityService / OperatorSelect / BotService random pick.
+
+### Combat polish
+- Splice ally walk-through via CollisionGroups + NoCollisionConstraint (documented in AbilityService)
+- Anchor Frag knock wired through WeaponService (`_applyFragKnock`)
+- Viewmodel: local camera Part in `ViewmodelController` (skins/wraps)
+- Death recap: `DeathRecap` remote → HUD `"Name [Weapon] Xm head"`
+
+### Movement polish
+- Slide → jump cancel; bunny-hop horizontal cap; landing spread +3.5° for 200ms
+
+### Remotes added
+`DeathRecap`

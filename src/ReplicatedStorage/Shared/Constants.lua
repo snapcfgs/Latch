@@ -21,6 +21,10 @@ local Constants = {
 	AttributeQuietCrouch = "LatchQuietCrouch",
 	AttributeMeleeReloadBuffUntil = "LatchMeleeReloadUntil",
 	AttributeMeleeReloadMult = "LatchMeleeReloadMult",
+	AttributeExplosiveKnockReduction = "LatchExplosiveKnockReduction",
+	AttributeFragFuseBonus = "LatchFragFuseBonus",
+	AttributePlantedArmor = "LatchPlantedArmor",
+	AttributePlanted = "LatchPlanted",
 
 	-- Bots
 	AttributeIsBot = "LatchIsBot",

@@ -2,6 +2,7 @@
 --[[
 	WeaponController — fires remotes from input; camera-forward aim for PC + mobile.
 	Phase 2: ADS FOV lerp, Aiming flag for server spread, burst fire, loadout cycle.
+	Phase 5: landing spread penalty flag (200ms).
 ]]
 
 local Players = game:GetService("Players")
@@ -35,6 +36,7 @@ function WeaponController.new(input: any, remotes: { [string]: RemoteEvent })
 		_burstNextAt = 0,
 		_recoilIndex = 1,
 		_fireWasDown = false,
+		_landedAt = 0,
 	}, WeaponController)
 	return self
 end
@@ -44,6 +46,22 @@ function WeaponController:Init()
 	if cam then
 		self._baseFov = cam.FieldOfView
 		self._fovTarget = cam.FieldOfView
+	end
+
+	local function hookChar(char: Model)
+		local hum = char:WaitForChild("Humanoid", 5) :: Humanoid?
+		if not hum then
+			return
+		end
+		hum.StateChanged:Connect(function(_old, newState)
+			if newState == Enum.HumanoidStateType.Landed then
+				self._landedAt = os.clock()
+			end
+		end)
+	end
+	player.CharacterAdded:Connect(hookChar)
+	if player.Character then
+		task.defer(hookChar, player.Character)
 	end
 
 	self._remotes.PlayerState.OnClientEvent:Connect(function(state)
@@ -185,11 +203,13 @@ function WeaponController:_applyRecoil(cfg: any)
 end
 
 function WeaponController:_fireHitscan(origin: Vector3, dir: Vector3)
+	local landPenalty = (os.clock() - self._landedAt) < (MatchSettings.LandingSpreadSeconds or 0.2)
 	self._remotes.FireWeapon:FireServer({
 		WeaponId = self._equipped,
 		Origin = origin,
 		Direction = dir,
 		Aiming = self._aiming,
+		LandedPenalty = landPenalty,
 		Timestamp = Workspace:GetServerTimeNow(),
 	})
 	local cfg = WeaponsConfig.Weapons[self._equipped :: any]

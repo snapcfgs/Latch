@@ -10,6 +10,7 @@ local Debris = game:GetService("Debris")
 local Workspace = game:GetService("Workspace")
 
 local WeaponsConfig = require(game.ReplicatedStorage.Config.Weapons)
+local MatchSettings = require(game.ReplicatedStorage.Config.MatchSettings)
 local Constants = require(game.ReplicatedStorage.Shared.Constants)
 local VFX = require(game.ReplicatedStorage.Util.VFX)
 local AbilityService = require(script.Parent.AbilityService)
@@ -95,6 +96,9 @@ function WeaponService.new(remotes: { [string]: RemoteEvent }, deps: { [string]:
 		_damageTakenMult = {} :: { [number]: number },
 		_gunCycleLocked = {} :: { [number]: boolean },
 		_stats = {} :: { [number]: { Kills: number, Deaths: number, Damage: number } },
+		_landingPenaltyUntil = {} :: { [number]: number },
+		_lastHit = {} :: { [number]: { KillerName: string, WeaponName: string, Distance: number, Headshot: boolean, KillerUserId: number } },
+		_landConn = {} :: { [number]: RBXScriptConnection },
 	}, WeaponService)
 	return self
 end
@@ -123,7 +127,38 @@ function WeaponService:Init()
 	end
 
 	Players.PlayerRemoving:Connect(function(player)
-		self._states[player.UserId] = nil
+		local uid = player.UserId
+		self._states[uid] = nil
+		self._landingPenaltyUntil[uid] = nil
+		self._lastHit[uid] = nil
+		local conn = self._landConn[uid]
+		if conn then
+			conn:Disconnect()
+			self._landConn[uid] = nil
+		end
+	end)
+end
+
+--[[ Bind Humanoid.StateChanged → landing spread penalty (Phase 5). ]]
+function WeaponService:BindLandingPenalty(actor: Actor)
+	local uid = ActorUtil.UserId(actor)
+	local prev = self._landConn[uid]
+	if prev then
+		prev:Disconnect()
+		self._landConn[uid] = nil
+	end
+	local char = ActorUtil.Character(actor)
+	if not char then
+		return
+	end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return
+	end
+	self._landConn[uid] = hum.StateChanged:Connect(function(_old, newState)
+		if newState == Enum.HumanoidStateType.Landed then
+			self._landingPenaltyUntil[uid] = Workspace:GetServerTimeNow() + (MatchSettings.LandingSpreadSeconds or 0.2)
+		end
 	end)
 end
 
@@ -141,6 +176,15 @@ end
 
 function WeaponService:SetupPlayer(player: Player)
 	self:SetupActor(player)
+	-- Rebind landing penalty on every respawn
+	if not player:GetAttribute("LatchLandBind") then
+		player:SetAttribute("LatchLandBind", true)
+		player.CharacterAdded:Connect(function()
+			task.defer(function()
+				self:BindLandingPenalty(player)
+			end)
+		end)
+	end
 end
 
 function WeaponService:SetupActor(actor: Actor, randomizeLoadout: boolean?)
@@ -183,11 +227,20 @@ function WeaponService:SetupActor(actor: Actor, randomizeLoadout: boolean?)
 		Loadout = loadout,
 		StimUsedThisRound = false,
 	}
+	self:BindLandingPenalty(actor)
 	self:_syncActorState(actor)
 end
 
 function WeaponService:ClearActor(actor: Actor)
-	self._states[ActorUtil.UserId(actor)] = nil
+	local uid = ActorUtil.UserId(actor)
+	self._states[uid] = nil
+	self._landingPenaltyUntil[uid] = nil
+	self._lastHit[uid] = nil
+	local conn = self._landConn[uid]
+	if conn then
+		conn:Disconnect()
+		self._landConn[uid] = nil
+	end
 end
 
 function WeaponService:Refill(player: Player)
@@ -263,6 +316,10 @@ function WeaponService:_sameTeam(a: Actor, b: Actor): boolean
 	return ActorUtil.GetAttribute(a, Constants.AttributeTeam) == ActorUtil.GetAttribute(b, Constants.AttributeTeam)
 end
 
+function WeaponService:DealDamage(attacker: Actor, victim: Actor, amount: number, weaponId: string, headshot: boolean)
+	self:_applyDamage(attacker, victim, amount, weaponId, headshot)
+end
+
 function WeaponService:_applyDamage(attacker: Actor, victim: Actor, amount: number, weaponId: string, headshot: boolean)
 	local char = ActorUtil.Character(victim)
 	if not char then
@@ -283,10 +340,35 @@ function WeaponService:_applyDamage(attacker: Actor, victim: Actor, amount: numb
 		amount = amount * takenMult
 	end
 
+	-- Warden planted armor: flat absorb while AttributePlantedArmor > 0
+	local armor = ActorUtil.GetAttribute(victim, Constants.AttributePlantedArmor)
+	if typeof(armor) == "number" and armor > 0 then
+		amount = math.max(0, amount - (armor :: number))
+	end
+	if amount <= 0 then
+		return
+	end
+
 	local before = hum.Health
 	hum:TakeDamage(amount)
 	local dealt = math.max(0, before - hum.Health)
 	self:_addStat(attackerId, "Damage", dealt)
+
+	local aRoot = ActorUtil.Root(attacker)
+	local vRoot = ActorUtil.Root(victim)
+	local dist = 0
+	if aRoot and vRoot then
+		dist = (aRoot.Position - vRoot.Position).Magnitude
+	end
+	local cfgEarly = WeaponsConfig.Weapons[weaponId :: any]
+	local weaponNameEarly = if cfgEarly then cfgEarly.DisplayName else weaponId
+	self._lastHit[victimId] = {
+		KillerName = ActorUtil.DisplayName(attacker),
+		WeaponName = weaponNameEarly,
+		Distance = dist,
+		Headshot = headshot,
+		KillerUserId = attackerId,
+	}
 
 	self._remotes.DamageNumber:FireAllClients({
 		TargetUserId = victimId,
@@ -317,8 +399,29 @@ function WeaponService:_applyDamage(attacker: Actor, victim: Actor, amount: numb
 				WeaponId = weaponId,
 				WeaponName = weaponName,
 				Headshot = headshot,
+				Distance = dist,
 				KillerIsBot = ActorUtil.IsBot(attacker),
 				VictimIsBot = ActorUtil.IsBot(victim),
+			})
+		end
+		-- Death recap line for the victim (Phase 5): "Nox [Coil SMG] 18m head"
+		if ActorUtil.IsPlayer(victim) and self._remotes.DeathRecap then
+			local hit = self._lastHit[victimId]
+			local d = if hit then math.floor((hit.Distance or dist) + 0.5) else math.floor(dist + 0.5)
+			local hs = if (hit and hit.Headshot) or headshot then " head" else ""
+			local line = string.format(
+				"%s [%s] %dm%s",
+				ActorUtil.DisplayName(attacker),
+				weaponName,
+				d,
+				hs
+			)
+			self._remotes.DeathRecap:FireClient(victim :: Player, {
+				Line = line,
+				KillerName = ActorUtil.DisplayName(attacker),
+				WeaponName = weaponName,
+				Distance = d,
+				Headshot = headshot,
 			})
 		end
 		if self._remotes.Announce then
@@ -564,6 +667,14 @@ function WeaponService:ServerFire(actor: Actor, payload: any)
 
 	local baseDir = direction.Unit
 	local spread = if aiming then cfg.AdsSpreadDegrees else cfg.SpreadDegrees
+	local landUntil = self._landingPenaltyUntil[uid]
+	if typeof(landUntil) == "number" and now < landUntil then
+		spread = (spread or 0) + (MatchSettings.LandingSpreadDegrees or 3.5)
+	end
+	-- Client may also flag LandedPenalty; accept as soft hint (server timer authoritative)
+	if payload.LandedPenalty == true and (typeof(landUntil) ~= "number" or now >= (landUntil :: number)) then
+		spread = (spread or 0) + (MatchSettings.LandingSpreadDegrees or 3.5) * 0.5
+	end
 	local pellets = math.max(1, cfg.PelletCount or 1)
 	local color = if pellets > 1 then Color3.fromRGB(255, 200, 90) else Color3.fromRGB(255, 230, 120)
 
@@ -807,6 +918,14 @@ function WeaponService:_onGrenade(player: Player, origin: any, velocity: any)
 	end)
 
 	local fuse = cfg.FuseTime or 1.6
+	-- Fuse operator passive: Frag fuse −0.3s (AttributeFragFuseBonus)
+	if (cfg.UtilityKind or "Frag") == "Frag" then
+		local fuseBonus = player:GetAttribute(Constants.AttributeFragFuseBonus)
+		if typeof(fuseBonus) ~= "number" then
+			fuseBonus = 0
+		end
+		fuse = math.max(0.35, fuse + (fuseBonus :: number))
+	end
 	local radius = cfg.ExplosionRadius or 18
 	local damage = cfg.Damage
 	Debris:AddItem(grenade, fuse + 0.5)
@@ -825,18 +944,26 @@ function WeaponService:_onGrenade(player: Player, origin: any, velocity: any)
 			params.FilterType = Enum.RaycastFilterType.Exclude
 			local hits = Workspace:GetPartBoundsInRadius(pos, radius, params)
 			local damaged: { [number]: boolean } = {}
+			local knocked: { [number]: boolean } = {}
 			for _, p in hits do
 				local model = p:FindFirstAncestorOfClass("Model")
 				if model then
 					local victim = self:_resolveFromModel(model)
 					if victim then
 						local vid = ActorUtil.UserId(victim)
+						local rootPart = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+						local dist = if rootPart then (rootPart.Position - pos).Magnitude else 0
+						local falloff = 1 - math.clamp(dist / radius, 0, 1) * 0.6
+						-- Damage enemies only
 						if not damaged[vid] and not self:_sameTeam(player, victim) then
 							damaged[vid] = true
-							local rootPart = model:FindFirstChild("HumanoidRootPart") :: BasePart?
-							local dist = if rootPart then (rootPart.Position - pos).Magnitude else 0
-							local falloff = 1 - math.clamp(dist / radius, 0, 1) * 0.6
 							self:_applyDamage(player, victim, damage * falloff, utilId, false)
+						end
+						-- Knock thrower + enemies (skip allied teammates); Anchor reduces self knock
+						local isSelf = vid == ActorUtil.UserId(player)
+						if not knocked[vid] and rootPart and (isSelf or not self:_sameTeam(player, victim)) then
+							knocked[vid] = true
+							self:_applyFragKnock(player, victim, rootPart, pos, radius)
 						end
 					end
 				end
@@ -870,6 +997,55 @@ function WeaponService:_onGrenade(player: Player, origin: any, velocity: any)
 	end)
 end
 
+
+--[[ Explosive knock — Anchor Blast Brace reduces self Frag knock. ]]
+function WeaponService:_applyFragKnock(thrower: Actor, victim: Actor, rootPart: BasePart, blastPos: Vector3, radius: number)
+	local offset = rootPart.Position - blastPos
+	local dist = offset.Magnitude
+	if dist < 0.05 then
+		offset = Vector3.new(0, 1, 0)
+		dist = 1
+	end
+	local dir = offset.Unit
+	-- Bias upward so frags feel like a pop
+	dir = (dir + Vector3.new(0, 0.45, 0)).Unit
+	local falloff = 1 - math.clamp(dist / math.max(radius, 1), 0, 1)
+	local speed = (MatchSettings.FragKnockSpeed or 48) * falloff
+	speed = math.min(speed, MatchSettings.FragKnockMax or 72)
+
+	local isSelf = ActorUtil.UserId(thrower) == ActorUtil.UserId(victim)
+	if isSelf then
+		local reduction = ActorUtil.GetAttribute(victim, Constants.AttributeExplosiveKnockReduction)
+		if typeof(reduction) ~= "number" then
+			reduction = 0
+		end
+		speed *= math.clamp(1 - (reduction :: number), 0, 1)
+	end
+	if speed < 1 then
+		return
+	end
+
+	local att = rootPart:FindFirstChild("LatchKnockAtt") :: Attachment?
+	if not att then
+		att = Instance.new("Attachment")
+		att.Name = "LatchKnockAtt"
+		att.Parent = rootPart
+	end
+	local lv = Instance.new("LinearVelocity")
+	lv.Name = "LatchFragKnock"
+	lv.Attachment0 = att
+	lv.MaxForce = 1e5
+	lv.VectorVelocity = dir * speed
+	lv.RelativeTo = Enum.ActuatorRelativeTo.World
+	lv.Parent = rootPart
+	Debris:AddItem(lv, 0.18)
+	-- Also nudge assembly for immediate feel
+	rootPart.AssemblyLinearVelocity = Vector3.new(
+		rootPart.AssemblyLinearVelocity.X,
+		math.max(rootPart.AssemblyLinearVelocity.Y, 0),
+		rootPart.AssemblyLinearVelocity.Z
+	) + dir * speed * 0.35
+end
 
 function WeaponService:GetEquipped(actor: Actor): string?
 	local state = self._states[ActorUtil.UserId(actor)]

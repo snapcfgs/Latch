@@ -41,6 +41,7 @@ abilityService:Init()
 
 local weaponService = WeaponService.new(remotes, { Abilities = abilityService, Data = dataService })
 weaponService:Init()
+abilityService:SetWeaponService(weaponService)
 
 local mapService = MapService.new()
 mapService:Init()
@@ -50,6 +51,7 @@ local matchService = MatchService.new(remotes, weaponService, abilityService, ni
 local botService = BotService.new(remotes, weaponService, abilityService)
 botService:SetMapService(mapService)
 botService:Init()
+abilityService:SetBotService(botService)
 
 matchService:SetBotService(botService)
 matchService:SetMapService(mapService)
@@ -69,4 +71,4 @@ for _, p in game:GetService("Players"):GetPlayers() do
 	end)
 end
 
-print("[Latch] Server bootstrap complete (Phase 4 progression + economy)")
+print("[Latch] Server bootstrap complete (Phase 5 operators + combat polish)")

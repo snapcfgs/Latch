@@ -53,7 +53,7 @@ function OperatorSelectController:_build()
 	panel.Name = "Panel"
 	panel.AnchorPoint = Vector2.new(0, 0.5)
 	panel.Position = UDim2.new(0, 16, 0.5, 0)
-	panel.Size = UDim2.fromOffset(280, 280)
+	panel.Size = UDim2.fromOffset(280, 380)
 	panel.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
 	panel.BackgroundTransparency = 0.15
 	panel.BorderSizePixel = 0

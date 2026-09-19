@@ -149,4 +149,4 @@ UserInputService.InputBegan:Connect(function(inputObj, _processed)
 	end
 end)
 
-print("[Latch] Client bootstrap complete (Phase 4) — touch=", input:IsTouch())
+print("[Latch] Client bootstrap complete (Phase 5) — touch=", input:IsTouch())

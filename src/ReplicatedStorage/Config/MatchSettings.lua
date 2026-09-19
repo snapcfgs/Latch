@@ -59,6 +59,19 @@ local MatchSettings = {
 	SlideDuration = 0.55,
 	SlideCooldown = 0.8,
 	SlideMinSprintTime = 0.15,
+
+	-- Phase 5 movement polish
+	-- Cap horizontal speed retained across chained bunny-hops
+	BunnyHopSpeedCap = 26,
+	-- Window after landing where consecutive jump speed is capped
+	BunnyHopChainWindow = 0.35,
+	-- Landing accuracy penalty duration (seconds)
+	LandingSpreadSeconds = 0.2,
+	-- Extra degrees of spread while landing penalty is active
+	LandingSpreadDegrees = 3.5,
+	-- Frag explosion knock impulse (studs/s); Anchor passive scales self knock
+	FragKnockSpeed = 48,
+	FragKnockMax = 72,
 }
 
 return MatchSettings

@@ -66,6 +66,11 @@ function HUDController:Init()
 			self:_killFeed(payload)
 		end)
 	end
+	if self._remotes.DeathRecap then
+		self._remotes.DeathRecap.OnClientEvent:Connect(function(payload)
+			self:_deathRecap(payload)
+		end)
+	end
 	if self._remotes.Announce then
 		self._remotes.Announce.OnClientEvent:Connect(function(payload)
 			self:_announce(payload)
@@ -133,6 +138,12 @@ function HUDController:_build()
 		Enum.TextXAlignment.Center
 	if self._labels.Announce then
 		self._labels.Announce.TextColor3 = Color3.fromRGB(255, 220, 140)
+	end
+	label("DeathRecap", UDim2.new(0.5, -220, 0.42, 0), UDim2.fromOffset(440, 32), "", 20).TextXAlignment =
+		Enum.TextXAlignment.Center
+	if self._labels.DeathRecap then
+		self._labels.DeathRecap.TextColor3 = Color3.fromRGB(255, 180, 120)
+		self._labels.DeathRecap.TextStrokeTransparency = 0.3
 	end
 
 	-- Crosshair
@@ -386,6 +397,71 @@ function HUDController:_flashAnnounce(msg: string)
 			end
 		end)
 	end
+end
+
+
+function HUDController:_flashBang(payload: any)
+	if typeof(payload) ~= "table" or not self._flashOverlay then
+		return
+	end
+	local intensity = tonumber(payload.Intensity) or 1
+	local duration = tonumber(payload.Duration) or 1.6
+	self._flashOverlay.BackgroundTransparency = math.clamp(1 - intensity, 0, 0.85)
+	task.delay(math.max(0.1, duration), function()
+		if self._flashOverlay then
+			self._flashOverlay.BackgroundTransparency = 1
+		end
+	end)
+end
+
+function HUDController:_killFeed(payload: any)
+	if typeof(payload) ~= "table" or not self._killFeed then
+		return
+	end
+	local killer = tostring(payload.KillerName or "?")
+	local victim = tostring(payload.VictimName or "?")
+	local weapon = tostring(payload.WeaponName or payload.WeaponId or "")
+	local hs = if payload.Headshot then " ●" else ""
+	local row = Instance.new("TextLabel")
+	row.BackgroundTransparency = 0.35
+	row.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+	row.Size = UDim2.new(1, 0, 0, 22)
+	row.Font = Enum.Font.Gotham
+	row.TextSize = 13
+	row.TextColor3 = Color3.new(1, 1, 1)
+	row.TextXAlignment = Enum.TextXAlignment.Right
+	row.Text = string.format("%s [%s]%s  %s", killer, weapon, hs, victim)
+	row.Parent = self._killFeed
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = row
+	task.delay(5, function()
+		row:Destroy()
+	end)
+end
+
+function HUDController:_deathRecap(payload: any)
+	if typeof(payload) ~= "table" then
+		return
+	end
+	local line = tostring(payload.Line or "")
+	if line == "" then
+		local killer = tostring(payload.KillerName or "?")
+		local weapon = tostring(payload.WeaponName or "?")
+		local dist = math.floor(tonumber(payload.Distance) or 0)
+		local hs = if payload.Headshot then " head" else ""
+		line = string.format("%s [%s] %dm%s", killer, weapon, dist, hs)
+	end
+	if self._labels.DeathRecap then
+		self._labels.DeathRecap.Text = line
+		task.delay(4.5, function()
+			if self._labels.DeathRecap and self._labels.DeathRecap.Text == line then
+				self._labels.DeathRecap.Text = ""
+			end
+		end)
+	end
+	-- Also echo on announce strip
+	self:_flashAnnounce(line)
 end
 
 return HUDController

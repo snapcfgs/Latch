@@ -26,6 +26,7 @@ local RemoteNames = {
 	"SetLoadout", -- client → server (Phase 2; Token gates in Phase 4)
 	"FlashEffect", -- server → client HUD white flash
 	"KillFeed", -- server → all (humans + bots)
+	"DeathRecap", -- server → victim (killer / weapon / distance / head)
 	-- Abilities
 	"UseAbility",
 	"AbilityFx", -- server → clients for VFX
