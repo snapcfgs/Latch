@@ -291,6 +291,11 @@ function InputController:_buildTouchGui()
 	-- Sprint is automatic while moving on mobile (optional hold)
 	local sprint = self:_makeButton(gui, "Sprint", "RUN", UDim2.new(0, 90, 1, -110), UDim2.fromOffset(80, 80))
 	self:_bindHold(sprint, "Sprint")
+
+	-- Phase 2: mobile ADS
+	local ads = self:_makeButton(gui, "ADS", "ADS", UDim2.new(1, -200, 1, -340), UDim2.fromOffset(80, 80))
+	ads.BackgroundColor3 = Color3.fromRGB(50, 70, 90)
+	self:_bindHold(ads, "Aim")
 end
 
 function InputController:IsTouch(): boolean

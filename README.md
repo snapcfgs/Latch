@@ -31,7 +31,7 @@ Project file: `default.project.json` maps `src/` → `ReplicatedStorage`, `Serve
 2. **Queue 1v1** or **Queue 2v2**.
 3. Controls:
    - **Mouse1** fire / melee / throw (depends on equipped)
-   - **1–4** weapon slots (AR, Pistol, Knife, Frag)
+   - **1–4** weapon slots (loadout primary/secondary/melee/utility) · **RMB** ADS
    - **E** cycle weapon · **R** reload · **Q** ability
    - **Shift** sprint · **C / Ctrl** crouch · crouch while sprinting = **slide**
    - **Space** jump
@@ -106,6 +106,32 @@ Six original code-built arenas (Parts only, no `.rbxm`):
 
 Config: `Config/Maps.lua`, `MatchSettings.MapVoteSeconds`. Remotes: `MapVoteStart` / `MapVoteCast` / `MapVoteUpdate` / `MapVoteResult`.
 
+
+
+## Phase 2 — Weapons, ADS, shotgun pellets
+
+Full original roster (no marketplace IDs / no Rivals names):
+
+| Slot | Weapons |
+|------|---------|
+| **Primary** | Pulse AR, Coil SMG, Longscope, Breach Shotgun, Cycle Burst |
+| **Secondary** | Sidearm, Machine Pistol, Stub Revolver |
+| **Melee** | Blade, Crowbar, Bat |
+| **Utility** | Frag, Flash Can, Smoke Can, Stim Cap |
+
+Default loadout: **Pulse AR / Sidearm / Blade / Frag**.
+
+### How to test
+1. `rojo serve` + Play Solo — default loadout still works (1–4 / GUN cycle).
+2. **ADS**: hold **RMB** (or mobile **ADS** button) — FOV lerps in; server spread shrinks (`Aiming` on `FireWeapon`).
+3. **Breach Shotgun**: equip via Loadout panel (lobby left) → fire — 8 server pellets, wider spread, pellet VFX streaks.
+4. **Flash Can**: throw utility — enemies in radius get white HUD flash (`FlashEffect`).
+5. **Smoke Can**: throw — `VFX.SmokeSphere` fog (Parts/Beams).
+6. **Stim Cap**: equip utility + fire — +30 HP over 2s, **1/round** (refill resets).
+7. Bots pick random loadouts and fire their equipped primary; kill feed / hitmarkers include bot names.
+
+Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. Loadout UI: `LoadoutController` (Phase 4 Token gates later).
+
 ## Architecture
 
 - Custom bootstrap (no Knit): `Bootstrap.server.lua` / `Bootstrap.client.lua`
@@ -121,7 +147,7 @@ Config: `Config/Maps.lua`, `MatchSettings.MapVoteSeconds`. Remotes: `MapVoteStar
 - Bot AI is competent but not tournament-level (no grenade throws / advanced peeks yet)
 - Splice blocks **movement** for everyone; only **bullets** are one-way for allies
 - Anchor explosive resistance is an attribute stub (no knockback system yet)
-- No dedicated shotgun / 4v4 / ranked
+- 4v4 / ranked still later; shotgun + utilities are in Phase 2
 - First-person zoom lock is a simple camera distance clamp
 - Lobby bot “emotes” are Billboard stubs
 

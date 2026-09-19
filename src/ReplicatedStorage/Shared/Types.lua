@@ -20,7 +20,7 @@ export type WeaponSlot = "Primary" | "Secondary" | "Melee" | "Utility"
 
 export type OperatorId = "Skid" | "Anchor" | "Splice" | "Jolt"
 
-export type WeaponId = "AssaultRifle" | "Pistol" | "Knife" | "FragGrenade"
+export type WeaponId = string -- Phase 2 roster; see Config/Weapons.lua
 
 export type PlayerMatchState = {
 	UserId: number,

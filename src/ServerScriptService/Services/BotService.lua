@@ -832,7 +832,7 @@ function BotService:_tickMatchBot(bot: BotRecord, brain: BotBrain, now: number)
 				local aimPoint = eRoot.Position + Vector3.new(0, 1.2, 0)
 				local dir = self:_aimWithCone(origin, aimPoint, diff.AccuracyConeDegrees)
 				self._weapons:ServerFire(bot, {
-					WeaponId = "AssaultRifle",
+					WeaponId = (self._weapons:GetEquipped(bot) or "AssaultRifle"),
 					Origin = origin,
 					Direction = dir,
 				})

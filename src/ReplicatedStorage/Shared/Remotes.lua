@@ -23,6 +23,9 @@ local RemoteNames = {
 	"SwitchWeapon",
 	"ThrowGrenade",
 	"MeleeSwing",
+	"SetLoadout", -- client → server (Phase 2; Token gates in Phase 4)
+	"FlashEffect", -- server → client HUD white flash
+	"KillFeed", -- server → all (humans + bots)
 	-- Abilities
 	"UseAbility",
 	"AbilityFx", -- server → clients for VFX

@@ -19,6 +19,7 @@ local AbilityController = require(Controllers.AbilityController)
 local HUDController = require(Controllers.HUDController)
 local OperatorSelectController = require(Controllers.OperatorSelectController)
 local MapVoteController = require(Controllers.MapVoteController)
+local LoadoutController = require(Controllers.LoadoutController)
 
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
@@ -46,6 +47,9 @@ opSelect:Init()
 
 local mapVote = MapVoteController.new(remotes)
 mapVote:Init()
+
+local loadout = LoadoutController.new(remotes)
+loadout:Init()
 
 local player = Players.LocalPlayer
 player.CameraMode = Enum.CameraMode.Classic

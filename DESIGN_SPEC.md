@@ -169,3 +169,25 @@ Queue fill → **MapVote** → Countdown → Round… → MatchEnd → lobby (ma
 
 ### Client
 - `MapVoteController` — 3 buttons + timer; mouse unlocked during MapVote
+
+
+## Phase 2 — Weapons, ADS, pellets, utilities (implemented)
+
+### Roster
+Primaries: Pulse AR, Coil SMG, Longscope, Breach Shotgun, Cycle Burst  
+Secondaries: Sidearm, Machine Pistol, Stub Revolver  
+Melees: Blade, Crowbar, Bat  
+Utilities: Frag, Flash Can, Smoke Can, Stim Cap  
+
+Ids keep `AssaultRifle` / `Pistol` / `Knife` / `FragGrenade` for the defaults so Phase 0/1 boot paths stay stable.
+
+### Combat
+- Server raycast hitscan; shotgun = multi-pellet rays; ADS reduces spread via `Aiming` on `FireWeapon`
+- Limb / torso / head multipliers from `Weapons.BodyMultiplier`
+- Burst (`CycleBurst`) client-queued; balance in Config only
+- Utilities: Frag explosion; Flash → `FlashEffect` HUD; Smoke → `VFX.SmokeSphere`; Stim → 30 HP / 2s, 1 per round
+- Loadout: 1 of each slot via `SetLoadout` + `LoadoutController` (unlock-all until Phase 4 Tokens)
+- Bots randomize loadout; `GetEquipped` drives bot fire; `KillFeed` / `Announce` include bots
+
+### Remotes added
+`SetLoadout`, `FlashEffect`, `KillFeed` (via `Remotes.lua` only)

@@ -51,6 +51,17 @@ function HUDController:Init()
 			self:_hitmarker(payload.Headshot == true)
 		end
 	end)
+
+	if self._remotes.FlashEffect then
+		self._remotes.FlashEffect.OnClientEvent:Connect(function(payload)
+			self:_flashBang(payload)
+		end)
+	end
+	if self._remotes.KillFeed then
+		self._remotes.KillFeed.OnClientEvent:Connect(function(payload)
+			self:_killFeed(payload)
+		end)
+	end
 	if self._remotes.Announce then
 		self._remotes.Announce.OnClientEvent:Connect(function(payload)
 			self:_announce(payload)
@@ -133,6 +144,7 @@ function HUDController:_build()
 	c.CornerRadius = UDim.new(1, 0)
 	c.Parent = cross
 
+	self._crossArms = {} :: { Frame }
 	local function arm(dx: number, dy: number, w: number, h: number)
 		local f = Instance.new("Frame")
 		f.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -142,11 +154,39 @@ function HUDController:_build()
 		f.BorderSizePixel = 0
 		f.BackgroundTransparency = 0.15
 		f.Parent = gui
+		table.insert(self._crossArms, f)
 	end
 	arm(0, -12, 2, 10)
 	arm(0, 12, 2, 10)
 	arm(-12, 0, 10, 2)
 	arm(12, 0, 10, 2)
+
+	
+	-- Flash overlay (Flash Can)
+	local flash = Instance.new("Frame")
+	flash.Name = "FlashOverlay"
+	flash.Size = UDim2.fromScale(1, 1)
+	flash.BackgroundColor3 = Color3.new(1, 1, 1)
+	flash.BackgroundTransparency = 1
+	flash.BorderSizePixel = 0
+	flash.ZIndex = 50
+	flash.Parent = gui
+	self._flashOverlay = flash
+
+	-- Kill feed
+	local feed = Instance.new("Frame")
+	feed.Name = "KillFeed"
+	feed.BackgroundTransparency = 1
+	feed.AnchorPoint = Vector2.new(1, 0)
+	feed.Position = UDim2.new(1, -16, 0, topPad + 90)
+	feed.Size = UDim2.fromOffset(320, 160)
+	feed.Parent = gui
+	local feedLayout = Instance.new("UIListLayout")
+	feedLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	feedLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+	feedLayout.Padding = UDim.new(0, 4)
+	feedLayout.Parent = feed
+	self._killFeed = feed
 
 	self._hitmarker = Instance.new("TextLabel")
 	self._hitmarker.Name = "Hitmarker"
@@ -211,11 +251,34 @@ function HUDController:_refresh()
 	if self._labels.Weapon and cfg then
 		self._labels.Weapon.Text = cfg.DisplayName
 	end
+	-- Crosshair gap by weapon / ADS
+	if self._crossArms and cfg then
+		local gap = cfg.CrosshairGap or 12
+		if self._weapons.IsAiming and self._weapons:IsAiming() then
+			gap = math.max(4, gap * 0.55)
+		end
+		-- arms order: up, down, left, right
+		if self._crossArms[1] then
+			self._crossArms[1].Position = UDim2.new(0.5, 0, 0.5, -gap)
+		end
+		if self._crossArms[2] then
+			self._crossArms[2].Position = UDim2.new(0.5, 0, 0.5, gap)
+		end
+		if self._crossArms[3] then
+			self._crossArms[3].Position = UDim2.new(0.5, -gap, 0.5, 0)
+		end
+		if self._crossArms[4] then
+			self._crossArms[4].Position = UDim2.new(0.5, gap, 0.5, 0)
+		end
+	end
+
 	if self._labels.Ammo and cfg then
 		if cfg.Kind == "Melee" then
 			self._labels.Ammo.Text = "MELEE"
 		elseif cfg.Kind == "Projectile" then
-			self._labels.Ammo.Text = "FRAG"
+			self._labels.Ammo.Text = string.upper(cfg.UtilityKind or "UTIL")
+		elseif cfg.Kind == "Utility" then
+			self._labels.Ammo.Text = if (ammo and ammo[equipped] and (ammo[equipped].Mag or 0) > 0) then "STIM READY" else "STIM USED"
 		else
 			local a = ammo and ammo[equipped]
 			if a then

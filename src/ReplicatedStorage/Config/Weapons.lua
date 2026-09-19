@@ -1,32 +1,69 @@
 --!strict
 --[[
-	Weapons — loadout definitions. All damage/fire rate balance here.
+	Weapons — full Phase 2 roster. All damage / fire rate / ADS / pellet balance here.
+	Default loadout: Pulse AR / Sidearm / Blade / Frag.
+	Phase 4 will gate unlocks with Tokens; for now all weapons are selectable in LoadoutController.
 ]]
 
-export type WeaponId = "AssaultRifle" | "Pistol" | "Knife" | "FragGrenade"
+export type WeaponId =
+	"AssaultRifle"
+	| "CoilSMG"
+	| "Longscope"
+	| "BreachShotgun"
+	| "CycleBurst"
+	| "Pistol"
+	| "MachinePistol"
+	| "StubRevolver"
+	| "Knife"
+	| "Crowbar"
+	| "Bat"
+	| "FragGrenade"
+	| "FlashCan"
+	| "SmokeCan"
+	| "StimCap"
+
+export type WeaponSlot = "Primary" | "Secondary" | "Melee" | "Utility"
+export type WeaponKind = "Hitscan" | "Melee" | "Projectile" | "Utility"
+export type UtilityKind = "Frag" | "Flash" | "Smoke" | "Stim"
 
 export type WeaponConfig = {
 	Id: WeaponId,
 	DisplayName: string,
-	Slot: "Primary" | "Secondary" | "Melee" | "Utility",
-	Kind: "Hitscan" | "Melee" | "Projectile",
+	Slot: WeaponSlot,
+	Kind: WeaponKind,
 	Damage: number,
 	HeadMultiplier: number,
-	FireRate: number, -- shots per second
+	TorsoMultiplier: number,
+	LimbMultiplier: number,
+	FireRate: number, -- shots (or bursts) per second
 	MagSize: number,
 	ReserveAmmo: number,
 	ReloadTime: number,
 	Range: number,
 	SpreadDegrees: number,
+	AdsSpreadDegrees: number,
+	AdsFov: number,
+	MoveSpeedMult: number,
+	PelletCount: number,
+	EquipTime: number,
+	InspectStub: boolean,
 	Auto: boolean,
-	-- Melee
+	BurstCount: number?,
+	BurstInterval: number?,
+	RecoilPattern: { number },
+	CrosshairGap: number,
 	MeleeRange: number?,
 	MeleeArcDegrees: number?,
-	-- Grenade
+	UtilityKind: UtilityKind?,
 	ProjectileSpeed: number?,
 	ExplosionRadius: number?,
 	FuseTime: number?,
 	ThrowCooldown: number?,
+	FlashDuration: number?,
+	SmokeDuration: number?,
+	SmokeRadius: number?,
+	StimHealTotal: number?,
+	StimHealDuration: number?,
 }
 
 local Weapons: { [WeaponId]: WeaponConfig } = {
@@ -37,13 +74,125 @@ local Weapons: { [WeaponId]: WeaponConfig } = {
 		Kind = "Hitscan",
 		Damage = 18,
 		HeadMultiplier = 1.4,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.85,
 		FireRate = 9,
 		MagSize = 30,
 		ReserveAmmo = 90,
 		ReloadTime = 1.8,
 		Range = 400,
 		SpreadDegrees = 1.2,
+		AdsSpreadDegrees = 0.45,
+		AdsFov = 62,
+		MoveSpeedMult = 0.88,
+		PelletCount = 1,
+		EquipTime = 0.35,
+		InspectStub = true,
 		Auto = true,
+		RecoilPattern = { 0.35, 0.4, 0.45, 0.5, 0.42, 0.38 },
+		CrosshairGap = 12,
+	},
+	CoilSMG = {
+		Id = "CoilSMG",
+		DisplayName = "Coil SMG",
+		Slot = "Primary",
+		Kind = "Hitscan",
+		Damage = 14,
+		HeadMultiplier = 1.35,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.8,
+		FireRate = 13,
+		MagSize = 32,
+		ReserveAmmo = 96,
+		ReloadTime = 1.55,
+		Range = 280,
+		SpreadDegrees = 2.0,
+		AdsSpreadDegrees = 0.9,
+		AdsFov = 65,
+		MoveSpeedMult = 0.92,
+		PelletCount = 1,
+		EquipTime = 0.28,
+		InspectStub = true,
+		Auto = true,
+		RecoilPattern = { 0.28, 0.32, 0.36, 0.3 },
+		CrosshairGap = 16,
+	},
+	Longscope = {
+		Id = "Longscope",
+		DisplayName = "Longscope",
+		Slot = "Primary",
+		Kind = "Hitscan",
+		Damage = 55,
+		HeadMultiplier = 1.75,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.75,
+		FireRate = 1.15,
+		MagSize = 5,
+		ReserveAmmo = 20,
+		ReloadTime = 2.4,
+		Range = 700,
+		SpreadDegrees = 0.35,
+		AdsSpreadDegrees = 0.05,
+		AdsFov = 40,
+		MoveSpeedMult = 0.72,
+		PelletCount = 1,
+		EquipTime = 0.55,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = { 1.8, 1.6 },
+		CrosshairGap = 6,
+	},
+	BreachShotgun = {
+		Id = "BreachShotgun",
+		DisplayName = "Breach Shotgun",
+		Slot = "Primary",
+		Kind = "Hitscan",
+		Damage = 12,
+		HeadMultiplier = 1.25,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.9,
+		FireRate = 1.1,
+		MagSize = 6,
+		ReserveAmmo = 24,
+		ReloadTime = 2.6,
+		Range = 90,
+		SpreadDegrees = 5.5,
+		AdsSpreadDegrees = 3.2,
+		AdsFov = 60,
+		MoveSpeedMult = 0.85,
+		PelletCount = 8,
+		EquipTime = 0.45,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = { 2.2, 1.8 },
+		CrosshairGap = 22,
+	},
+	CycleBurst = {
+		Id = "CycleBurst",
+		DisplayName = "Cycle Burst",
+		Slot = "Primary",
+		Kind = "Hitscan",
+		Damage = 22,
+		HeadMultiplier = 1.45,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.85,
+		FireRate = 2.4,
+		MagSize = 24,
+		ReserveAmmo = 72,
+		ReloadTime = 1.9,
+		Range = 380,
+		SpreadDegrees = 1.0,
+		AdsSpreadDegrees = 0.35,
+		AdsFov = 58,
+		MoveSpeedMult = 0.86,
+		PelletCount = 1,
+		EquipTime = 0.4,
+		InspectStub = true,
+		Auto = false,
+		BurstCount = 3,
+		BurstInterval = 0.055,
+		RecoilPattern = { 0.5, 0.55, 0.6 },
+		CrosshairGap = 10,
 	},
 	Pistol = {
 		Id = "Pistol",
@@ -52,13 +201,73 @@ local Weapons: { [WeaponId]: WeaponConfig } = {
 		Kind = "Hitscan",
 		Damage = 28,
 		HeadMultiplier = 1.6,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.85,
 		FireRate = 4,
 		MagSize = 12,
 		ReserveAmmo = 36,
 		ReloadTime = 1.4,
 		Range = 250,
 		SpreadDegrees = 0.8,
+		AdsSpreadDegrees = 0.3,
+		AdsFov = 64,
+		MoveSpeedMult = 0.95,
+		PelletCount = 1,
+		EquipTime = 0.25,
+		InspectStub = true,
 		Auto = false,
+		RecoilPattern = { 0.55, 0.5 },
+		CrosshairGap = 10,
+	},
+	MachinePistol = {
+		Id = "MachinePistol",
+		DisplayName = "Machine Pistol",
+		Slot = "Secondary",
+		Kind = "Hitscan",
+		Damage = 12,
+		HeadMultiplier = 1.3,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.8,
+		FireRate = 11,
+		MagSize = 20,
+		ReserveAmmo = 60,
+		ReloadTime = 1.5,
+		Range = 180,
+		SpreadDegrees = 2.4,
+		AdsSpreadDegrees = 1.1,
+		AdsFov = 66,
+		MoveSpeedMult = 0.94,
+		PelletCount = 1,
+		EquipTime = 0.22,
+		InspectStub = true,
+		Auto = true,
+		RecoilPattern = { 0.4, 0.45, 0.5, 0.42 },
+		CrosshairGap = 18,
+	},
+	StubRevolver = {
+		Id = "StubRevolver",
+		DisplayName = "Stub Revolver",
+		Slot = "Secondary",
+		Kind = "Hitscan",
+		Damage = 48,
+		HeadMultiplier = 1.7,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 0.8,
+		FireRate = 1.6,
+		MagSize = 6,
+		ReserveAmmo = 24,
+		ReloadTime = 2.0,
+		Range = 220,
+		SpreadDegrees = 0.9,
+		AdsSpreadDegrees = 0.35,
+		AdsFov = 60,
+		MoveSpeedMult = 0.9,
+		PelletCount = 1,
+		EquipTime = 0.3,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = { 1.4, 1.2 },
+		CrosshairGap = 8,
 	},
 	Knife = {
 		Id = "Knife",
@@ -67,15 +276,79 @@ local Weapons: { [WeaponId]: WeaponConfig } = {
 		Kind = "Melee",
 		Damage = 45,
 		HeadMultiplier = 1.0,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 1.0,
 		FireRate = 2.2,
 		MagSize = 0,
 		ReserveAmmo = 0,
 		ReloadTime = 0,
 		Range = 0,
 		SpreadDegrees = 0,
+		AdsSpreadDegrees = 0,
+		AdsFov = 70,
+		MoveSpeedMult = 1.0,
+		PelletCount = 1,
+		EquipTime = 0.2,
+		InspectStub = true,
 		Auto = false,
+		RecoilPattern = {},
+		CrosshairGap = 14,
 		MeleeRange = 8,
 		MeleeArcDegrees = 70,
+	},
+	Crowbar = {
+		Id = "Crowbar",
+		DisplayName = "Crowbar",
+		Slot = "Melee",
+		Kind = "Melee",
+		Damage = 55,
+		HeadMultiplier = 1.0,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 1.0,
+		FireRate = 1.5,
+		MagSize = 0,
+		ReserveAmmo = 0,
+		ReloadTime = 0,
+		Range = 0,
+		SpreadDegrees = 0,
+		AdsSpreadDegrees = 0,
+		AdsFov = 70,
+		MoveSpeedMult = 1.0,
+		PelletCount = 1,
+		EquipTime = 0.28,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = {},
+		CrosshairGap = 16,
+		MeleeRange = 9.5,
+		MeleeArcDegrees = 80,
+	},
+	Bat = {
+		Id = "Bat",
+		DisplayName = "Bat",
+		Slot = "Melee",
+		Kind = "Melee",
+		Damage = 38,
+		HeadMultiplier = 1.0,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 1.0,
+		FireRate = 2.6,
+		MagSize = 0,
+		ReserveAmmo = 0,
+		ReloadTime = 0,
+		Range = 0,
+		SpreadDegrees = 0,
+		AdsSpreadDegrees = 0,
+		AdsFov = 70,
+		MoveSpeedMult = 1.0,
+		PelletCount = 1,
+		EquipTime = 0.24,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = {},
+		CrosshairGap = 15,
+		MeleeRange = 8.5,
+		MeleeArcDegrees = 90,
 	},
 	FragGrenade = {
 		Id = "FragGrenade",
@@ -84,23 +357,200 @@ local Weapons: { [WeaponId]: WeaponConfig } = {
 		Kind = "Projectile",
 		Damage = 80,
 		HeadMultiplier = 1.0,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 1.0,
 		FireRate = 0,
 		MagSize = 1,
 		ReserveAmmo = 1,
 		ReloadTime = 0,
 		Range = 0,
 		SpreadDegrees = 0,
+		AdsSpreadDegrees = 0,
+		AdsFov = 70,
+		MoveSpeedMult = 1.0,
+		PelletCount = 1,
+		EquipTime = 0.3,
+		InspectStub = true,
 		Auto = false,
+		RecoilPattern = {},
+		CrosshairGap = 12,
+		UtilityKind = "Frag",
 		ProjectileSpeed = 90,
 		ExplosionRadius = 18,
 		FuseTime = 1.6,
 		ThrowCooldown = 8,
 	},
+	FlashCan = {
+		Id = "FlashCan",
+		DisplayName = "Flash Can",
+		Slot = "Utility",
+		Kind = "Projectile",
+		Damage = 0,
+		HeadMultiplier = 1.0,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 1.0,
+		FireRate = 0,
+		MagSize = 1,
+		ReserveAmmo = 1,
+		ReloadTime = 0,
+		Range = 0,
+		SpreadDegrees = 0,
+		AdsSpreadDegrees = 0,
+		AdsFov = 70,
+		MoveSpeedMult = 1.0,
+		PelletCount = 1,
+		EquipTime = 0.3,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = {},
+		CrosshairGap = 12,
+		UtilityKind = "Flash",
+		ProjectileSpeed = 85,
+		ExplosionRadius = 22,
+		FuseTime = 1.2,
+		ThrowCooldown = 10,
+		FlashDuration = 1.6,
+	},
+	SmokeCan = {
+		Id = "SmokeCan",
+		DisplayName = "Smoke Can",
+		Slot = "Utility",
+		Kind = "Projectile",
+		Damage = 0,
+		HeadMultiplier = 1.0,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 1.0,
+		FireRate = 0,
+		MagSize = 1,
+		ReserveAmmo = 1,
+		ReloadTime = 0,
+		Range = 0,
+		SpreadDegrees = 0,
+		AdsSpreadDegrees = 0,
+		AdsFov = 70,
+		MoveSpeedMult = 1.0,
+		PelletCount = 1,
+		EquipTime = 0.3,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = {},
+		CrosshairGap = 12,
+		UtilityKind = "Smoke",
+		ProjectileSpeed = 80,
+		ExplosionRadius = 16,
+		FuseTime = 1.0,
+		ThrowCooldown = 12,
+		SmokeDuration = 8,
+		SmokeRadius = 18,
+	},
+	StimCap = {
+		Id = "StimCap",
+		DisplayName = "Stim Cap",
+		Slot = "Utility",
+		Kind = "Utility",
+		Damage = 0,
+		HeadMultiplier = 1.0,
+		TorsoMultiplier = 1.0,
+		LimbMultiplier = 1.0,
+		FireRate = 0,
+		MagSize = 1,
+		ReserveAmmo = 0,
+		ReloadTime = 0,
+		Range = 0,
+		SpreadDegrees = 0,
+		AdsSpreadDegrees = 0,
+		AdsFov = 70,
+		MoveSpeedMult = 1.0,
+		PelletCount = 1,
+		EquipTime = 0.2,
+		InspectStub = true,
+		Auto = false,
+		RecoilPattern = {},
+		CrosshairGap = 12,
+		UtilityKind = "Stim",
+		ThrowCooldown = 0,
+		StimHealTotal = 30,
+		StimHealDuration = 2,
+	},
 }
 
-local LoadoutOrder: { WeaponId } = { "AssaultRifle", "Pistol", "Knife", "FragGrenade" }
+local DefaultLoadout: { [WeaponSlot]: WeaponId } = {
+	Primary = "AssaultRifle",
+	Secondary = "Pistol",
+	Melee = "Knife",
+	Utility = "FragGrenade",
+}
+
+-- Active slot cycle order (default loadout). Client overrides from PlayerState.Loadout.
+local LoadoutOrder: { WeaponId } = {
+	DefaultLoadout.Primary,
+	DefaultLoadout.Secondary,
+	DefaultLoadout.Melee,
+	DefaultLoadout.Utility,
+}
+
+local SlotOrder: { WeaponSlot } = { "Primary", "Secondary", "Melee", "Utility" }
+
+local function getBySlot(slot: WeaponSlot): { WeaponId }
+	local list: { WeaponId } = {}
+	for id, cfg in Weapons do
+		if cfg.Slot == slot then
+			table.insert(list, id)
+		end
+	end
+	table.sort(list)
+	return list
+end
+
+local function loadoutToOrder(loadout: { [string]: string }): { WeaponId }
+	return {
+		loadout.Primary :: WeaponId,
+		loadout.Secondary :: WeaponId,
+		loadout.Melee :: WeaponId,
+		loadout.Utility :: WeaponId,
+	}
+end
+
+local function isLimbPart(partName: string): boolean
+	local n = string.lower(partName)
+	return string.find(n, "arm", 1, true) ~= nil
+		or string.find(n, "hand", 1, true) ~= nil
+		or string.find(n, "leg", 1, true) ~= nil
+		or string.find(n, "foot", 1, true) ~= nil
+end
+
+local function isTorsoPart(partName: string): boolean
+	local n = string.lower(partName)
+	return n == "torso" or n == "uppertorso" or n == "lowertorso" or n == "humanoidrootpart"
+end
+
+local function bodyMultiplier(cfg: WeaponConfig, partName: string): (number, boolean)
+	if partName == "Head" then
+		return cfg.HeadMultiplier, true
+	end
+	if isLimbPart(partName) then
+		return cfg.LimbMultiplier, false
+	end
+	if isTorsoPart(partName) then
+		return cfg.TorsoMultiplier, false
+	end
+	return cfg.TorsoMultiplier, false
+end
+
+local AllIds: { WeaponId } = {}
+for id in Weapons do
+	table.insert(AllIds, id)
+end
+table.sort(AllIds)
 
 return {
 	Weapons = Weapons,
+	DefaultLoadout = DefaultLoadout,
 	LoadoutOrder = LoadoutOrder,
+	SlotOrder = SlotOrder,
+	GetBySlot = getBySlot,
+	LoadoutToOrder = loadoutToOrder,
+	BodyMultiplier = bodyMultiplier,
+	IsLimbPart = isLimbPart,
+	AllIds = AllIds,
 }

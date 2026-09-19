@@ -132,6 +132,76 @@ function VFX.AttachHighlight(adornee: Instance, fill: Color3, outline: Color3, l
 	return hl
 end
 
+
+--[[ Smoke Can fog — translucent sphere + soft Beam spokes (no ParticleEmitters). ]]
+function VFX.SmokeSphere(position: Vector3, radius: number, duration: number, color: Color3?)
+	if not canSpawn() then
+		return
+	end
+	local life = math.clamp(duration, 1, Constants.AbilityVFXLifetimeCap)
+	local folder = Instance.new("Folder")
+	folder.Name = "LatchSmoke"
+	folder.Parent = workspace
+
+	local core = Instance.new("Part")
+	core.Name = "SmokeCore"
+	core.Shape = Enum.PartType.Ball
+	core.Anchored = true
+	core.CanCollide = false
+	core.CanQuery = false
+	core.CanTouch = false
+	core.Material = Enum.Material.ForceField
+	core.Color = color or Color3.fromRGB(160, 170, 180)
+	core.Transparency = 0.55
+	core.Size = Vector3.new(2, 2, 2)
+	core.Position = position
+	core.Parent = folder
+
+	local grow = TweenService:Create(core, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(radius * 2, radius * 2, radius * 2),
+		Transparency = 0.72,
+	})
+	grow:Play()
+
+	for i = 1, 4 do
+		local angle = (i / 4) * math.pi * 2
+		local offset = Vector3.new(math.cos(angle), 0.2, math.sin(angle)) * (radius * 0.35)
+		local tip = Instance.new("Part")
+		tip.Name = "SmokeSpoke"
+		tip.Anchored = true
+		tip.CanCollide = false
+		tip.CanQuery = false
+		tip.Transparency = 1
+		tip.Size = Vector3.new(0.1, 0.1, 0.1)
+		tip.Position = position + offset
+		tip.Parent = folder
+
+		local att0 = Instance.new("Attachment")
+		att0.Parent = core
+		local att1 = Instance.new("Attachment")
+		att1.Parent = tip
+		local beam = Instance.new("Beam")
+		beam.Attachment0 = att0
+		beam.Attachment1 = att1
+		beam.Width0 = radius * 0.5
+		beam.Width1 = radius * 0.2
+		beam.FaceCamera = true
+		beam.Color = ColorSequence.new(color or Color3.fromRGB(150, 160, 170))
+		beam.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.65),
+			NumberSequenceKeypoint.new(1, 0.95),
+		})
+		beam.Parent = tip
+	end
+
+	track(folder, life)
+	task.delay(math.max(0.1, life - 0.8), function()
+		if core.Parent then
+			TweenService:Create(core, TweenInfo.new(0.75), { Transparency = 1 }):Play()
+		end
+	end)
+end
+
 function VFX.GetActiveCount(): number
 	return activeCount
 end
