@@ -31,6 +31,9 @@ local RemoteNames = {
 	-- Player state
 	"PlayerState",
 	"DamageNumber",
+	-- Bots / stand-ins
+	"Announce",
+	"StandInReplaced",
 }
 
 export type RemotesMap = { [string]: RemoteEvent }

@@ -17,6 +17,8 @@
 	  CollisionGroup: panel collides with everyone for movement (blocks walks);
 	  walk-through for allies is NOT implemented in MVP (shoot-through only) —
 	  documented tradeoff for mobile simplicity.
+
+	Actors: Player | BotRecord via ActorUtil.
 ]]
 
 local Players = game:GetService("Players")
@@ -27,6 +29,10 @@ local Workspace = game:GetService("Workspace")
 local OperatorsConfig = require(game.ReplicatedStorage.Config.Operators)
 local Constants = require(game.ReplicatedStorage.Shared.Constants)
 local VFX = require(game.ReplicatedStorage.Util.VFX)
+local ActorUtil = require(script.Parent.ActorUtil)
+
+type Actor = ActorUtil.Actor
+type BotRecord = ActorUtil.BotRecord
 
 local AbilityService = {}
 AbilityService.__index = AbilityService
@@ -43,7 +49,6 @@ local function ensureCollisionGroups()
 			PhysicsService:RegisterCollisionGroup(name)
 		end)
 	end
-	-- Cover blocks everyone
 	pcall(function()
 		PhysicsService:CollisionGroupSetCollidable(Constants.CollisionGroupCover, Constants.CollisionGroupPlayers, true)
 	end)
@@ -52,7 +57,8 @@ end
 function AbilityService.new(remotes: { [string]: RemoteEvent })
 	local self = setmetatable({
 		_remotes = remotes,
-		_cooldowns = {} :: { [Player]: number },
+		_cooldowns = {} :: { [number]: number },
+		_botFromCharacter = nil :: ((Model) -> BotRecord?)?,
 	}, AbilityService)
 	return self
 end
@@ -60,39 +66,50 @@ end
 function AbilityService:Init()
 	ensureCollisionGroups()
 	self._remotes.UseAbility.OnServerEvent:Connect(function(player, payload)
-		self:_onUse(player, payload)
+		self:ServerUse(player, payload)
 	end)
 	Players.PlayerRemoving:Connect(function(player)
-		self._cooldowns[player] = nil
+		self._cooldowns[player.UserId] = nil
 	end)
 end
 
+function AbilityService:SetBotResolver(fn: (Model) -> BotRecord?)
+	self._botFromCharacter = fn
+end
+
+function AbilityService:ClearActor(actor: Actor)
+	self._cooldowns[ActorUtil.UserId(actor)] = nil
+end
+
 function AbilityService:ApplyOperatorPassives(player: Player, operatorId: string)
-	player:SetAttribute(Constants.AttributeOperator, operatorId)
+	self:ApplyOperatorPassivesActor(player, operatorId)
+end
+
+function AbilityService:ApplyOperatorPassivesActor(actor: Actor, operatorId: string)
+	ActorUtil.SetAttribute(actor, Constants.AttributeOperator, operatorId)
 	local cfg = OperatorsConfig.Operators[operatorId :: any]
 	if not cfg then
 		return
 	end
 	if operatorId == "Skid" then
-		player:SetAttribute(Constants.AttributeSlideDurationBonus, cfg.SlideDurationBonus or 0.2)
+		ActorUtil.SetAttribute(actor, Constants.AttributeSlideDurationBonus, cfg.SlideDurationBonus or 0.2)
 	else
-		player:SetAttribute(Constants.AttributeSlideDurationBonus, 0)
+		ActorUtil.SetAttribute(actor, Constants.AttributeSlideDurationBonus, 0)
 	end
 	if operatorId == "Splice" then
-		player:SetAttribute(Constants.AttributeQuietCrouch, true)
+		ActorUtil.SetAttribute(actor, Constants.AttributeQuietCrouch, true)
 	else
-		player:SetAttribute(Constants.AttributeQuietCrouch, false)
+		ActorUtil.SetAttribute(actor, Constants.AttributeQuietCrouch, false)
 	end
-	-- Anchor explosive resistance is stubbed via attribute for future knockback
 	if operatorId == "Anchor" then
-		player:SetAttribute("LatchExplosiveKnockReduction", cfg.ExplosiveKnockReduction or 0.5)
+		ActorUtil.SetAttribute(actor, "LatchExplosiveKnockReduction", cfg.ExplosiveKnockReduction or 0.5)
 	else
-		player:SetAttribute("LatchExplosiveKnockReduction", 0)
+		ActorUtil.SetAttribute(actor, "LatchExplosiveKnockReduction", 0)
 	end
 end
 
-function AbilityService:_aliveRoot(player: Player): (Model?, BasePart?)
-	local char = player.Character
+function AbilityService:_aliveRoot(actor: Actor): (Model?, BasePart?)
+	local char = ActorUtil.Character(actor)
 	if not char then
 		return nil, nil
 	end
@@ -101,17 +118,17 @@ function AbilityService:_aliveRoot(player: Player): (Model?, BasePart?)
 	if not hum or hum.Health <= 0 or not root then
 		return nil, nil
 	end
-	if player:GetAttribute(Constants.AttributeAlive) == false then
+	if ActorUtil.GetAttribute(actor, Constants.AttributeAlive) == false then
 		return nil, nil
 	end
 	return char, root
 end
 
-function AbilityService:_onUse(player: Player, payload: any)
+function AbilityService:ServerUse(actor: Actor, payload: any)
 	if typeof(payload) ~= "table" then
 		return
 	end
-	local operatorId = player:GetAttribute(Constants.AttributeOperator)
+	local operatorId = ActorUtil.GetAttribute(actor, Constants.AttributeOperator)
 	if typeof(operatorId) ~= "string" then
 		return
 	end
@@ -121,7 +138,8 @@ function AbilityService:_onUse(player: Player, payload: any)
 	end
 
 	local now = Workspace:GetServerTimeNow()
-	local readyAt = self._cooldowns[player] or 0
+	local uid = ActorUtil.UserId(actor)
+	local readyAt = self._cooldowns[uid] or 0
 	if now < readyAt then
 		return
 	end
@@ -132,7 +150,7 @@ function AbilityService:_onUse(player: Player, payload: any)
 		return
 	end
 
-	local char, root = self:_aliveRoot(player)
+	local char, root = self:_aliveRoot(actor)
 	if not char or not root then
 		return
 	end
@@ -142,29 +160,31 @@ function AbilityService:_onUse(player: Player, payload: any)
 
 	local ok = false
 	if operatorId == "Skid" then
-		ok = self:_skid(player, char, root, look.Unit, cfg)
+		ok = self:_skid(actor, char, root, look.Unit, cfg)
 	elseif operatorId == "Anchor" then
-		ok = self:_anchor(player, root, look.Unit, cfg)
+		ok = self:_anchor(actor, root, look.Unit, cfg)
 	elseif operatorId == "Splice" then
-		ok = self:_splice(player, root, look.Unit, cfg)
+		ok = self:_splice(actor, root, look.Unit, cfg)
 	elseif operatorId == "Jolt" then
-		ok = self:_jolt(player, root, look.Unit, payload.TargetUserId, cfg)
+		ok = self:_jolt(actor, root, look.Unit, payload.TargetUserId, cfg)
 	end
 
 	if ok then
-		self._cooldowns[player] = now + cfg.Cooldown
+		self._cooldowns[uid] = now + cfg.Cooldown
 		self._remotes.AbilityFx:FireAllClients({
-			UserId = player.UserId,
+			UserId = uid,
 			OperatorId = operatorId,
-			CooldownEndsAt = self._cooldowns[player],
+			CooldownEndsAt = self._cooldowns[uid],
 		})
-		self._remotes.PlayerState:FireClient(player, {
-			AbilityCooldownEndsAt = self._cooldowns[player],
-		})
+		if ActorUtil.IsPlayer(actor) then
+			self._remotes.PlayerState:FireClient(actor :: Player, {
+				AbilityCooldownEndsAt = self._cooldowns[uid],
+			})
+		end
 	end
 end
 
-function AbilityService:_skid(player: Player, char: Model, root: BasePart, dir: Vector3, cfg: any): boolean
+function AbilityService:_skid(_actor: Actor, char: Model, root: BasePart, dir: Vector3, cfg: any): boolean
 	local flat = Vector3.new(dir.X, 0, dir.Z)
 	if flat.Magnitude < 0.1 then
 		flat = root.CFrame.LookVector
@@ -176,7 +196,6 @@ function AbilityService:_skid(player: Player, char: Model, root: BasePart, dir: 
 	local speed = cfg.DashSpeed or 80
 	local maxDist = cfg.DashMaxDistance or 28
 
-	-- Validate distance via short ray
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { char }
@@ -202,7 +221,6 @@ function AbilityService:_skid(player: Player, char: Model, root: BasePart, dir: 
 	lv.Parent = root
 	Debris:AddItem(lv, duration)
 
-	-- Soft cap: stop if traveled enough
 	task.delay(duration, function()
 		if lv.Parent then
 			lv:Destroy()
@@ -211,7 +229,7 @@ function AbilityService:_skid(player: Player, char: Model, root: BasePart, dir: 
 	return true
 end
 
-function AbilityService:_anchor(player: Player, root: BasePart, dir: Vector3, cfg: any): boolean
+function AbilityService:_anchor(_actor: Actor, root: BasePart, dir: Vector3, cfg: any): boolean
 	local flat = Vector3.new(dir.X, 0, dir.Z)
 	if flat.Magnitude < 0.1 then
 		flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
@@ -243,7 +261,7 @@ function AbilityService:_anchor(player: Player, root: BasePart, dir: Vector3, cf
 	return true
 end
 
-function AbilityService:_splice(player: Player, root: BasePart, dir: Vector3, cfg: any): boolean
+function AbilityService:_splice(actor: Actor, root: BasePart, dir: Vector3, cfg: any): boolean
 	local flat = Vector3.new(dir.X, 0, dir.Z)
 	if flat.Magnitude < 0.1 then
 		flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
@@ -251,7 +269,7 @@ function AbilityService:_splice(player: Player, root: BasePart, dir: Vector3, cf
 	flat = flat.Unit
 	local size: Vector3 = cfg.PanelSize or Vector3.new(6, 5, 0.4)
 	local lifetime = cfg.PanelLifetime or 5
-	local team = player:GetAttribute(Constants.AttributeTeam)
+	local team = ActorUtil.GetAttribute(actor, Constants.AttributeTeam)
 	local pos = root.Position + flat * 5 + Vector3.new(0, size.Y / 2 - 1, 0)
 
 	local panel = Instance.new("Part")
@@ -262,60 +280,67 @@ function AbilityService:_splice(player: Player, root: BasePart, dir: Vector3, cf
 	panel.Color = Color3.fromRGB(60, 180, 220)
 	panel.Material = Enum.Material.ForceField
 	panel.Transparency = 0.45
-	panel.CanCollide = true -- blocks movement for all (MVP tradeoff)
+	panel.CanCollide = true
 	panel:SetAttribute("LatchSpliceTeam", team)
-	--[[
-		Raycast pierce: WeaponService / custom cast should skip this part when
-		attacker:GetAttribute(Team) == LatchSpliceTeam. See pierce helper below.
-	]]
 	panel.Parent = Workspace
 	VFX.AttachHighlight(panel, Color3.fromRGB(40, 200, 255), Color3.fromRGB(180, 240, 255), lifetime)
 	Debris:AddItem(panel, lifetime)
 	return true
 end
 
---[[
-	Pierce helper for hitscan: call from WeaponService ray loop if desired.
-	Returns true if this instance should be ignored (ally one-way).
-]]
 function AbilityService.ShouldPierceSplice(attacker: Player, hitInstance: Instance): boolean
+	return AbilityService.ShouldPierceSpliceActor(attacker, hitInstance)
+end
+
+function AbilityService.ShouldPierceSpliceActor(attacker: Actor, hitInstance: Instance): boolean
 	local team = hitInstance:GetAttribute("LatchSpliceTeam")
 	if team == nil then
 		return false
 	end
-	return attacker:GetAttribute(Constants.AttributeTeam) == team
+	return ActorUtil.GetAttribute(attacker, Constants.AttributeTeam) == team
 end
 
-function AbilityService:_jolt(player: Player, root: BasePart, dir: Vector3, targetUserId: any, cfg: any): boolean
+function AbilityService:_jolt(actor: Actor, root: BasePart, dir: Vector3, targetUserId: any, cfg: any): boolean
 	local range = cfg.MarkRange or 120
 	local duration = cfg.MarkDuration or 3
-	local victim: Player? = nil
+	local victim: Actor? = nil
 
 	if typeof(targetUserId) == "number" then
-		victim = Players:GetPlayerByUserId(targetUserId)
-	end
-
-	if not victim then
-		-- Raycast find target
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = { player.Character :: Instance }
-		local result = Workspace:Raycast(root.Position + Vector3.new(0, 1.5, 0), dir.Unit * range, params)
-		if result then
-			local model = result.Instance:FindFirstAncestorOfClass("Model")
-			if model then
-				victim = Players:GetPlayerFromCharacter(model)
+		local plr = Players:GetPlayerByUserId(targetUserId)
+		if plr then
+			victim = plr
+		elseif self._botFromCharacter then
+			-- Resolve bot by scanning — BotService stores by id; ask via character scan
+			for _, inst in Workspace:GetDescendants() do
+				if inst:IsA("Model") and inst:GetAttribute(Constants.AttributeBotId) == targetUserId then
+					victim = self._botFromCharacter(inst)
+					break
+				end
 			end
 		end
 	end
 
-	if not victim or victim == player then
+	if not victim then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		local char = ActorUtil.Character(actor)
+		params.FilterDescendantsInstances = if char then { char } else {}
+		local result = Workspace:Raycast(root.Position + Vector3.new(0, 1.5, 0), dir.Unit * range, params)
+		if result then
+			local model = result.Instance:FindFirstAncestorOfClass("Model")
+			if model then
+				victim = ActorUtil.FromCharacter(model, self._botFromCharacter)
+			end
+		end
+	end
+
+	if not victim or ActorUtil.UserId(victim) == ActorUtil.UserId(actor) then
 		return false
 	end
-	if victim:GetAttribute(Constants.AttributeTeam) == player:GetAttribute(Constants.AttributeTeam) then
+	if ActorUtil.GetAttribute(victim, Constants.AttributeTeam) == ActorUtil.GetAttribute(actor, Constants.AttributeTeam) then
 		return false
 	end
-	local vChar = victim.Character
+	local vChar = ActorUtil.Character(victim)
 	if not vChar then
 		return false
 	end
@@ -323,18 +348,26 @@ function AbilityService:_jolt(player: Player, root: BasePart, dir: Vector3, targ
 	VFX.AttachHighlight(vChar, Color3.fromRGB(255, 80, 80), Color3.fromRGB(255, 200, 50), duration)
 	self._remotes.AbilityFx:FireAllClients({
 		Kind = "JoltMark",
-		TargetUserId = victim.UserId,
+		TargetUserId = ActorUtil.UserId(victim),
 		Duration = duration,
 	})
 	return true
 end
 
 function AbilityService:GetCooldownEndsAt(player: Player): number
-	return self._cooldowns[player] or 0
+	return self:GetCooldownEndsAtActor(player)
+end
+
+function AbilityService:GetCooldownEndsAtActor(actor: Actor): number
+	return self._cooldowns[ActorUtil.UserId(actor)] or 0
 end
 
 function AbilityService:ResetCooldown(player: Player)
-	self._cooldowns[player] = 0
+	self:ResetCooldownActor(player)
+end
+
+function AbilityService:ResetCooldownActor(actor: Actor)
+	self._cooldowns[ActorUtil.UserId(actor)] = 0
 end
 
 return AbilityService

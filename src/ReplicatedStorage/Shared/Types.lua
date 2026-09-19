@@ -3,6 +3,17 @@
 
 export type TeamId = "A" | "B"
 
+export type BotDifficulty = "Recruit" | "Standard" | "Sweat"
+
+export type SnapshotFighter = {
+	UserId: number,
+	DisplayName: string,
+	IsBot: boolean,
+	OperatorId: string?,
+	Alive: boolean,
+	Team: TeamId,
+}
+
 export type MatchPhase = "Lobby" | "Countdown" | "Round" | "RoundEnd" | "MatchEnd"
 
 export type WeaponSlot = "Primary" | "Secondary" | "Melee" | "Utility"
@@ -27,6 +38,10 @@ export type MatchSnapshot = {
 	ScoreB: number,
 	RoundsToWin: number,
 	PhaseEndsAt: number?, -- workspace:GetServerTimeNow()
+	TeamA: { number }?,
+	TeamB: { number }?,
+	Fighters: { SnapshotFighter }?,
+	FillEndsAt: number?,
 }
 
 export type FireRequest = {

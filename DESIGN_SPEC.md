@@ -117,3 +117,26 @@ One mirrored small arena:
 - Same damage, ability rules, and netcode on both platforms
 - Abstract input (ContextActionService / input map); large touch targets; HUD safe-area aware
 - Prefer light VFX for mid-range mobile performance
+
+
+## Phase 0 — AI bots & solo Play (implemented)
+
+Solo Studio Play is a real first-to-5 match vs AI bots (not empty-team practice).
+
+### Bot system
+- `Config/BotNames.lua` — name pool + `DisplayName#####` tags
+- `Config/Bots.lua` — Recruit / Standard / Sweat (accuracy cone, reaction delay, move jitter, ability use chance)
+- `BotService` — spawn/despawn Humanoid bots with attributes `IsBot`, `TeamId`, `OperatorId`, `Difficulty`, `DisplayName`
+- Waypoint graph from `ArenaBuilder` (invisible Parts/Attachments)
+- AI states: Idle, Hunt, TakeCover, Peek, Shoot, Reload, Ability, Retreat, Rotate
+- Combat goes through `WeaponService:ServerFire` / `AbilityService:ServerUse` with `Actor` = Player | BotRecord
+- LobbyBotDirector maintains 6–12 lobby wanderers with simple emote stubs
+
+### Match fill
+- 1v1: after **3s** without a second human → add bot opponent and start
+- 2v2: after **4s** → fill remaining slots with bots
+- Rounds end when one team has 0 alive (humans + bots). **No** empty team B practice skip.
+- Mid-fill human join replaces lowest-difficulty bot; `StandInReplaced` / `Announce` remotes notify clients
+
+### Remotes added
+- `Announce`, `StandInReplaced` (via `Remotes.lua` only)

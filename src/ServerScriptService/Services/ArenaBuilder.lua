@@ -108,7 +108,73 @@ function ArenaBuilder.Build()
 	mid.Position = Vector3.new(0, 5, 0)
 	mid.Parent = arena
 
+	ArenaBuilder._placeWaypoints(arena)
+
 	return arena
+end
+
+function ArenaBuilder._placeWaypoints(arena: Instance)
+	local existing = arena:FindFirstChild("Waypoints")
+	if existing then
+		existing:Destroy()
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = "Waypoints"
+	folder.Parent = arena
+
+	-- Grid across playable floor (inside walls ~±58 x, ±38 z)
+	local spacing = 14
+	local idx = 0
+	for x = -49, 49, spacing do
+		for z = -28, 28, spacing do
+			-- Skip extreme corners outside lane feel
+			if math.abs(x) > 55 then
+				continue
+			end
+			idx += 1
+			local p = Instance.new("Part")
+			p.Name = "WP_" .. tostring(idx)
+			p.Anchored = true
+			p.CanCollide = false
+			p.CanQuery = false
+			p.CanTouch = false
+			p.Transparency = 1
+			p.Size = Vector3.new(1, 1, 1)
+			p.Position = Vector3.new(x, 1.5, z)
+			p.Parent = folder
+			local att = Instance.new("Attachment")
+			att.Name = "Waypoint"
+			att.Parent = p
+		end
+	end
+end
+
+function ArenaBuilder.EnsureWaypoints()
+	local arena = Workspace:FindFirstChild("LatchArena")
+	if not arena then
+		return
+	end
+	if not arena:FindFirstChild("Waypoints") then
+		ArenaBuilder._placeWaypoints(arena)
+	end
+end
+
+function ArenaBuilder.GetWaypointPositions(): { Vector3 }
+	local arena = Workspace:FindFirstChild("LatchArena")
+	if not arena then
+		return {}
+	end
+	local folder = arena:FindFirstChild("Waypoints")
+	if not folder then
+		return {}
+	end
+	local list: { Vector3 } = {}
+	for _, child in folder:GetChildren() do
+		if child:IsA("BasePart") then
+			table.insert(list, child.Position)
+		end
+	end
+	return list
 end
 
 function ArenaBuilder.GetSpawns(team: string): { SpawnLocation }

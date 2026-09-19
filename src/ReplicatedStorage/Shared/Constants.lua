@@ -21,6 +21,17 @@ local Constants = {
 	AttributeQuietCrouch = "LatchQuietCrouch",
 	AttributeMeleeReloadBuffUntil = "LatchMeleeReloadUntil",
 	AttributeMeleeReloadMult = "LatchMeleeReloadMult",
+
+	-- Bots
+	AttributeIsBot = "LatchIsBot",
+	AttributeDifficulty = "LatchDifficulty",
+	AttributeDisplayName = "LatchDisplayName",
+	AttributeBotId = "LatchBotId",
+	AttributeOperatorId = "LatchOperatorId",
+
+	-- Bot UserId range (negative, avoids colliding with real Roblox ids)
+	BotIdMin = -900000,
+	BotIdMax = -100001,
 }
 
 return Constants

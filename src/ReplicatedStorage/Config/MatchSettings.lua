@@ -11,6 +11,14 @@ local MatchSettings = {
 	MatchStartCountdown = 3,
 	RespawnInvulnSeconds = 1.5,
 
+	-- Queue fill: after this many seconds without enough humans, fill with bots
+	FillTimer1v1Seconds = 3,
+	FillTimer2v2Seconds = 4,
+
+	-- Lobby ambient bots (not in match)
+	LobbyBotMin = 6,
+	LobbyBotMax = 12,
+
 	Modes = {
 		Duel1v1 = {
 			Id = "1v1",

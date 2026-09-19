@@ -2,6 +2,7 @@
 --[[
 	WeaponService — server-authoritative hitscan, melee, grenades.
 	Validates fire rate, range, and ownership. Damage applied here only.
+	Actors: Player | BotRecord (via ActorUtil). State keyed by UserId.
 ]]
 
 local Players = game:GetService("Players")
@@ -9,13 +10,13 @@ local Debris = game:GetService("Debris")
 local Workspace = game:GetService("Workspace")
 
 local WeaponsConfig = require(game.ReplicatedStorage.Config.Weapons)
-local MatchSettings = require(game.ReplicatedStorage.Config.MatchSettings)
 local Constants = require(game.ReplicatedStorage.Shared.Constants)
 local VFX = require(game.ReplicatedStorage.Util.VFX)
 local AbilityService = require(script.Parent.AbilityService)
+local ActorUtil = require(script.Parent.ActorUtil)
 
-local WeaponService = {}
-WeaponService.__index = WeaponService
+type Actor = ActorUtil.Actor
+type BotRecord = ActorUtil.BotRecord
 
 type AmmoState = {
 	Mag: number,
@@ -24,28 +25,32 @@ type AmmoState = {
 	Reloading: boolean,
 }
 
-type PlayerWeaponState = {
+type WeaponState = {
 	Equipped: string,
 	Ammo: { [string]: AmmoState },
 	GrenadeReadyAt: number,
 }
 
+local WeaponService = {}
+WeaponService.__index = WeaponService
+
 function WeaponService.new(remotes: { [string]: RemoteEvent }, deps: { [string]: any })
 	local self = setmetatable({
 		_remotes = remotes,
 		_deps = deps,
-		_states = {} :: { [Player]: PlayerWeaponState },
-		_onKill = nil :: ((Player, Player) -> ())?,
+		_states = {} :: { [number]: WeaponState },
+		_onKill = nil :: ((Actor, Actor) -> ())?,
+		_botFromCharacter = nil :: ((Model) -> BotRecord?)?,
 	}, WeaponService)
 	return self
 end
 
 function WeaponService:Init()
 	self._remotes.FireWeapon.OnServerEvent:Connect(function(player, payload)
-		self:_onFire(player, payload)
+		self:ServerFire(player, payload)
 	end)
 	self._remotes.ReloadWeapon.OnServerEvent:Connect(function(player)
-		self:_onReload(player)
+		self:ServerReload(player)
 	end)
 	self._remotes.SwitchWeapon.OnServerEvent:Connect(function(player, weaponId)
 		self:_onSwitch(player, weaponId)
@@ -58,15 +63,28 @@ function WeaponService:Init()
 	end)
 
 	Players.PlayerRemoving:Connect(function(player)
-		self._states[player] = nil
+		self._states[player.UserId] = nil
 	end)
 end
 
-function WeaponService:SetOnKill(callback: (Player, Player) -> ())
+function WeaponService:SetOnKill(callback: (Actor, Actor) -> ())
 	self._onKill = callback
 end
 
+function WeaponService:SetBotResolver(fn: (Model) -> BotRecord?)
+	self._botFromCharacter = fn
+end
+
+function WeaponService:_resolveFromModel(model: Model): Actor?
+	return ActorUtil.FromCharacter(model, self._botFromCharacter)
+end
+
 function WeaponService:SetupPlayer(player: Player)
+	self:SetupActor(player)
+end
+
+function WeaponService:SetupActor(actor: Actor)
+	local uid = ActorUtil.UserId(actor)
 	local ammo: { [string]: AmmoState } = {}
 	for id, cfg in WeaponsConfig.Weapons do
 		ammo[id] = {
@@ -76,18 +94,27 @@ function WeaponService:SetupPlayer(player: Player)
 			Reloading = false,
 		}
 	end
-	self._states[player] = {
+	self._states[uid] = {
 		Equipped = "AssaultRifle",
 		Ammo = ammo,
 		GrenadeReadyAt = 0,
 	}
-	self:_syncPlayerState(player)
+	self:_syncActorState(actor)
+end
+
+function WeaponService:ClearActor(actor: Actor)
+	self._states[ActorUtil.UserId(actor)] = nil
 end
 
 function WeaponService:Refill(player: Player)
-	local state = self._states[player]
+	self:RefillActor(player)
+end
+
+function WeaponService:RefillActor(actor: Actor)
+	local uid = ActorUtil.UserId(actor)
+	local state = self._states[uid]
 	if not state then
-		self:SetupPlayer(player)
+		self:SetupActor(actor)
 		return
 	end
 	for id, cfg in WeaponsConfig.Weapons do
@@ -99,23 +126,38 @@ function WeaponService:Refill(player: Player)
 		end
 	end
 	state.GrenadeReadyAt = 0
-	self:_syncPlayerState(player)
+	self:_syncActorState(actor)
 end
 
-function WeaponService:_syncPlayerState(player: Player)
-	local state = self._states[player]
+function WeaponService:ActorNeedsReload(actor: Actor): boolean
+	local state = self._states[ActorUtil.UserId(actor)]
+	if not state then
+		return false
+	end
+	local ammo = state.Ammo[state.Equipped]
+	local cfg = WeaponsConfig.Weapons[state.Equipped :: any]
+	if not ammo or not cfg or cfg.Kind ~= "Hitscan" then
+		return false
+	end
+	return ammo.Mag <= 0 and ammo.Reserve > 0 and not ammo.Reloading
+end
+
+function WeaponService:_syncActorState(actor: Actor)
+	local state = self._states[ActorUtil.UserId(actor)]
 	if not state then
 		return
 	end
-	self._remotes.PlayerState:FireClient(player, {
-		Equipped = state.Equipped,
-		Ammo = state.Ammo,
-		GrenadeReadyAt = state.GrenadeReadyAt,
-	})
+	if ActorUtil.IsPlayer(actor) then
+		self._remotes.PlayerState:FireClient(actor :: Player, {
+			Equipped = state.Equipped,
+			Ammo = state.Ammo,
+			GrenadeReadyAt = state.GrenadeReadyAt,
+		})
+	end
 end
 
-function WeaponService:_characterAlive(player: Player): (Model?, Humanoid?, BasePart?)
-	local char = player.Character
+function WeaponService:_characterAlive(actor: Actor): (Model?, Humanoid?, BasePart?)
+	local char = ActorUtil.Character(actor)
 	if not char then
 		return nil, nil, nil
 	end
@@ -124,18 +166,18 @@ function WeaponService:_characterAlive(player: Player): (Model?, Humanoid?, Base
 	if not hum or hum.Health <= 0 or not root then
 		return nil, nil, nil
 	end
-	if player:GetAttribute(Constants.AttributeAlive) == false then
+	if ActorUtil.GetAttribute(actor, Constants.AttributeAlive) == false then
 		return nil, nil, nil
 	end
 	return char, hum, root
 end
 
-function WeaponService:_sameTeam(a: Player, b: Player): boolean
-	return a:GetAttribute(Constants.AttributeTeam) == b:GetAttribute(Constants.AttributeTeam)
+function WeaponService:_sameTeam(a: Actor, b: Actor): boolean
+	return ActorUtil.GetAttribute(a, Constants.AttributeTeam) == ActorUtil.GetAttribute(b, Constants.AttributeTeam)
 end
 
-function WeaponService:_applyDamage(attacker: Player, victim: Player, amount: number, weaponId: string, headshot: boolean)
-	local char = victim.Character
+function WeaponService:_applyDamage(attacker: Actor, victim: Actor, amount: number, _weaponId: string, headshot: boolean)
+	local char = ActorUtil.Character(victim)
 	if not char then
 		return
 	end
@@ -150,28 +192,30 @@ function WeaponService:_applyDamage(attacker: Player, victim: Player, amount: nu
 	local before = hum.Health
 	hum:TakeDamage(amount)
 	self._remotes.DamageNumber:FireAllClients({
-		TargetUserId = victim.UserId,
+		TargetUserId = ActorUtil.UserId(victim),
 		Amount = math.floor(amount + 0.5),
 		Headshot = headshot,
 		Position = if char:FindFirstChild("Head") then (char.Head :: BasePart).Position else nil,
 	})
-	self._remotes.WeaponHit:FireClient(attacker, {
-		Hit = true,
-		Headshot = headshot,
-		Damage = amount,
-	})
+	if ActorUtil.IsPlayer(attacker) then
+		self._remotes.WeaponHit:FireClient(attacker :: Player, {
+			Hit = true,
+			Headshot = headshot,
+			Damage = amount,
+		})
+	end
 
 	if before > 0 and hum.Health <= 0 then
-		victim:SetAttribute(Constants.AttributeAlive, false)
+		ActorUtil.SetAttribute(victim, Constants.AttributeAlive, false)
 		if self._onKill then
 			self._onKill(attacker, victim)
 		end
 	end
 end
 
-function WeaponService:_reloadMultiplier(player: Player): number
-	local untilT = player:GetAttribute(Constants.AttributeMeleeReloadBuffUntil)
-	local mult = player:GetAttribute(Constants.AttributeMeleeReloadMult)
+function WeaponService:_reloadMultiplier(actor: Actor): number
+	local untilT = ActorUtil.GetAttribute(actor, Constants.AttributeMeleeReloadBuffUntil)
+	local mult = ActorUtil.GetAttribute(actor, Constants.AttributeMeleeReloadMult)
 	if typeof(untilT) == "number" and typeof(mult) == "number" then
 		if Workspace:GetServerTimeNow() < untilT then
 			return mult :: number
@@ -187,16 +231,17 @@ function WeaponService:_onSwitch(player: Player, weaponId: any)
 	if not WeaponsConfig.Weapons[weaponId :: any] then
 		return
 	end
-	local state = self._states[player]
+	local state = self._states[player.UserId]
 	if not state then
 		return
 	end
 	state.Equipped = weaponId
-	self:_syncPlayerState(player)
+	self:_syncActorState(player)
 end
 
-function WeaponService:_onReload(player: Player)
-	local state = self._states[player]
+function WeaponService:ServerReload(actor: Actor)
+	local uid = ActorUtil.UserId(actor)
+	local state = self._states[uid]
 	if not state then
 		return
 	end
@@ -210,12 +255,12 @@ function WeaponService:_onReload(player: Player)
 		return
 	end
 	ammo.Reloading = true
-	player:SetAttribute(Constants.AttributeReloading, true)
-	self:_syncPlayerState(player)
+	ActorUtil.SetAttribute(actor, Constants.AttributeReloading, true)
+	self:_syncActorState(actor)
 
-	local reloadTime = cfg.ReloadTime * self:_reloadMultiplier(player)
+	local reloadTime = cfg.ReloadTime * self:_reloadMultiplier(actor)
 	task.delay(reloadTime, function()
-		if not self._states[player] then
+		if not self._states[uid] then
 			return
 		end
 		local need = cfg.MagSize - ammo.Mag
@@ -223,12 +268,12 @@ function WeaponService:_onReload(player: Player)
 		ammo.Mag += take
 		ammo.Reserve -= take
 		ammo.Reloading = false
-		player:SetAttribute(Constants.AttributeReloading, false)
-		self:_syncPlayerState(player)
+		ActorUtil.SetAttribute(actor, Constants.AttributeReloading, false)
+		self:_syncActorState(actor)
 	end)
 end
 
-function WeaponService:_onFire(player: Player, payload: any)
+function WeaponService:ServerFire(actor: Actor, payload: any)
 	if typeof(payload) ~= "table" then
 		return
 	end
@@ -242,16 +287,16 @@ function WeaponService:_onFire(player: Player, payload: any)
 		return
 	end
 
-	local _, _, root = self:_characterAlive(player)
-	if not root then
+	local char, _, root = self:_characterAlive(actor)
+	if not root or not char then
 		return
 	end
-	-- Sanity: origin near character
 	if (origin - root.Position).Magnitude > 20 then
 		origin = root.Position + Vector3.new(0, 1.5, 0)
 	end
 
-	local state = self._states[player]
+	local uid = ActorUtil.UserId(actor)
+	local state = self._states[uid]
 	if not state then
 		return
 	end
@@ -260,7 +305,12 @@ function WeaponService:_onFire(player: Player, payload: any)
 		return
 	end
 	if state.Equipped ~= weaponId then
-		return
+		-- Bots may fire equipped only; allow auto-equip AR for bots
+		if ActorUtil.IsBot(actor) and WeaponsConfig.Weapons[weaponId :: any] then
+			state.Equipped = weaponId
+		else
+			return
+		end
 	end
 	local ammo = state.Ammo[weaponId]
 	if not ammo or ammo.Reloading or ammo.Mag <= 0 then
@@ -270,7 +320,7 @@ function WeaponService:_onFire(player: Player, payload: any)
 	local now = Workspace:GetServerTimeNow()
 	local minInterval = 1 / math.max(cfg.FireRate, 0.1)
 	if now - ammo.LastFire < minInterval * 0.85 then
-		return -- rate limit with small tolerance
+		return
 	end
 	ammo.LastFire = now
 	ammo.Mag -= 1
@@ -278,14 +328,12 @@ function WeaponService:_onFire(player: Player, payload: any)
 	local dir = direction.Unit
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { player.Character :: Instance }
 	params.IgnoreWater = true
 
-	-- Multi-segment ray to pierce ally Splice one-way panels (see AbilityService comments)
 	local remaining = cfg.Range
 	local cursor = origin
 	local hitPos: Vector3? = nil
-	local filterList: { Instance } = { player.Character :: Instance }
+	local filterList: { Instance } = { char }
 	params.FilterDescendantsInstances = filterList
 	for _ = 1, 6 do
 		local result = Workspace:Raycast(cursor, dir * remaining, params)
@@ -293,7 +341,7 @@ function WeaponService:_onFire(player: Player, payload: any)
 			hitPos = cursor + dir * remaining
 			break
 		end
-		if AbilityService.ShouldPierceSplice(player, result.Instance) then
+		if AbilityService.ShouldPierceSpliceActor(actor, result.Instance) then
 			table.insert(filterList, result.Instance)
 			params.FilterDescendantsInstances = filterList
 			local step = (result.Position - cursor).Magnitude + 0.05
@@ -305,11 +353,11 @@ function WeaponService:_onFire(player: Player, payload: any)
 		local hitPart = result.Instance
 		local model = hitPart:FindFirstAncestorOfClass("Model")
 		if model then
-			local victimPlayer = Players:GetPlayerFromCharacter(model)
-			if victimPlayer then
+			local victim = self:_resolveFromModel(model)
+			if victim then
 				local headshot = hitPart.Name == "Head"
 				local dmg = cfg.Damage * (if headshot then cfg.HeadMultiplier else 1)
-				self:_applyDamage(player, victimPlayer, dmg, weaponId, headshot)
+				self:_applyDamage(actor, victim, dmg, weaponId, headshot)
 			end
 		end
 		break
@@ -318,9 +366,9 @@ function WeaponService:_onFire(player: Player, payload: any)
 		VFX.BeamStreak(origin, hitPos, Color3.fromRGB(255, 230, 120))
 	end
 
-	self:_syncPlayerState(player)
+	self:_syncActorState(actor)
 	if ammo.Mag <= 0 then
-		self:_onReload(player)
+		self:ServerReload(actor)
 	end
 end
 
@@ -332,7 +380,7 @@ function WeaponService:_onMelee(player: Player, lookDir: any)
 	if not char or not root then
 		return
 	end
-	local state = self._states[player]
+	local state = self._states[player.UserId]
 	if not state then
 		return
 	end
@@ -348,7 +396,7 @@ function WeaponService:_onMelee(player: Player, lookDir: any)
 	end
 	ammo.LastFire = now
 	state.Equipped = "Knife"
-	self:_syncPlayerState(player)
+	self:_syncActorState(player)
 
 	local range = cfg.MeleeRange or 8
 	local params = OverlapParams.new()
@@ -360,7 +408,7 @@ function WeaponService:_onMelee(player: Player, lookDir: any)
 	for _, p in parts do
 		local model = p:FindFirstAncestorOfClass("Model")
 		if model then
-			local victim = Players:GetPlayerFromCharacter(model)
+			local victim = self:_resolveFromModel(model)
 			if victim and not self:_sameTeam(player, victim) then
 				self:_applyDamage(player, victim, cfg.Damage, "Knife", false)
 				hitSomeone = true
@@ -369,7 +417,6 @@ function WeaponService:_onMelee(player: Player, lookDir: any)
 		end
 	end
 
-	-- Jolt passive: melee hit → faster reload buff
 	if hitSomeone and player:GetAttribute(Constants.AttributeOperator) == "Jolt" then
 		local OperatorsConfig = require(game.ReplicatedStorage.Config.Operators)
 		local jolt = OperatorsConfig.Operators.Jolt
@@ -390,7 +437,7 @@ function WeaponService:_onGrenade(player: Player, origin: any, velocity: any)
 		origin = root.Position + Vector3.new(0, 3, 0)
 	end
 
-	local state = self._states[player]
+	local state = self._states[player.UserId]
 	if not state then
 		return
 	end
@@ -405,7 +452,7 @@ function WeaponService:_onGrenade(player: Player, origin: any, velocity: any)
 	end
 
 	state.GrenadeReadyAt = now + (cfg.ThrowCooldown or 8)
-	self:_syncPlayerState(player)
+	self:_syncActorState(player)
 
 	local grenade = Instance.new("Part")
 	grenade.Name = "LatchFrag"
@@ -446,21 +493,25 @@ function WeaponService:_onGrenade(player: Player, origin: any, velocity: any)
 		local params = OverlapParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
 		local hits = Workspace:GetPartBoundsInRadius(pos, radius, params)
-		local damaged: { [Player]: boolean } = {}
+		local damaged: { [number]: boolean } = {}
 		for _, p in hits do
 			local model = p:FindFirstAncestorOfClass("Model")
 			if model then
-				local victim = Players:GetPlayerFromCharacter(model)
-				if victim and not damaged[victim] and not self:_sameTeam(player, victim) then
-					damaged[victim] = true
-					local rootPart = model:FindFirstChild("HumanoidRootPart") :: BasePart?
-					local dist = if rootPart then (rootPart.Position - pos).Magnitude else 0
-					local falloff = 1 - math.clamp(dist / radius, 0, 1) * 0.6
-					self:_applyDamage(player, victim, damage * falloff, "FragGrenade", false)
+				local victim = self:_resolveFromModel(model)
+				if victim then
+					local vid = ActorUtil.UserId(victim)
+					if not damaged[vid] and not self:_sameTeam(player, victim) then
+						damaged[vid] = true
+						local rootPart = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+						local dist = if rootPart then (rootPart.Position - pos).Magnitude else 0
+						local falloff = 1 - math.clamp(dist / radius, 0, 1) * 0.6
+						self:_applyDamage(player, victim, damage * falloff, "FragGrenade", false)
+					end
 				end
 			end
 		end
 	end)
 end
+
 
 return WeaponService

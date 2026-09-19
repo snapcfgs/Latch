@@ -51,6 +51,24 @@ function HUDController:Init()
 			self:_hitmarker(payload.Headshot == true)
 		end
 	end)
+	if self._remotes.Announce then
+		self._remotes.Announce.OnClientEvent:Connect(function(payload)
+			self:_announce(payload)
+		end)
+	end
+	if self._remotes.StandInReplaced then
+		self._remotes.StandInReplaced.OnClientEvent:Connect(function(payload)
+			if typeof(payload) == "table" then
+				local msg = string.format(
+					"Stand-in replaced: %s → %s",
+					tostring(payload.ReplacedBotName or "?"),
+					tostring(payload.PlayerName or "?")
+				)
+				print("[Latch]", msg)
+				self:_flashAnnounce(msg)
+			end
+		end)
+	end
 	RunService.RenderStepped:Connect(function()
 		self:_refresh()
 	end)
@@ -86,7 +104,7 @@ function HUDController:_build()
 
 	label("Score", UDim2.new(0.5, -100, 0, topPad + 8), UDim2.fromOffset(200, 28), "0 — 0", 22).TextXAlignment =
 		Enum.TextXAlignment.Center
-	label("Phase", UDim2.new(0.5, -120, 0, topPad + 36), UDim2.fromOffset(240, 22), "LOBBY", 16).TextXAlignment =
+	label("Phase", UDim2.new(0.5, -220, 0, topPad + 36), UDim2.fromOffset(440, 22), "LOBBY", 14).TextXAlignment =
 		Enum.TextXAlignment.Center
 
 	label("Health", UDim2.new(0, 24, 1, -70), UDim2.fromOffset(160, 28), "HP 100", 20)
@@ -96,6 +114,11 @@ function HUDController:_build()
 		Enum.TextXAlignment.Right
 	label("Ability", UDim2.new(0.5, -80, 1, -48), UDim2.fromOffset(160, 22), "Ability Ready", 14).TextXAlignment =
 		Enum.TextXAlignment.Center
+	label("Announce", UDim2.new(0.5, -200, 0, topPad + 64), UDim2.fromOffset(400, 24), "", 15).TextXAlignment =
+		Enum.TextXAlignment.Center
+	if self._labels.Announce then
+		self._labels.Announce.TextColor3 = Color3.fromRGB(255, 220, 140)
+	end
 
 	-- Crosshair
 	local cross = Instance.new("Frame")
@@ -147,7 +170,30 @@ function HUDController:_refresh()
 	if self._labels.Phase then
 		local phase = snap.Phase or "Lobby"
 		local round = snap.RoundNumber or 0
-		self._labels.Phase.Text = string.upper(tostring(phase)) .. (if round > 0 then ("  R" .. tostring(round)) else "")
+		local text = string.upper(tostring(phase)) .. (if round > 0 then ("  R" .. tostring(round)) else "")
+		if phase == "Lobby" and typeof(snap.FillEndsAt) == "number" then
+			local remain = (snap.FillEndsAt :: number) - Workspace:GetServerTimeNow()
+			if remain > 0 then
+				text = text .. string.format("  BOT FILL %.0fs", remain)
+			end
+		end
+		local fighters = snap.Fighters
+		if typeof(fighters) == "table" and #fighters > 0 then
+			local bits = {}
+			for _, f in fighters do
+				if typeof(f) == "table" then
+					local n = tostring(f.DisplayName or "?")
+					if f.IsBot then
+						n ..= "*"
+					end
+					table.insert(bits, n)
+				end
+			end
+			if #bits > 0 then
+				text = text .. "  |  " .. table.concat(bits, " vs ")
+			end
+		end
+		self._labels.Phase.Text = text
 	end
 
 	local char = player.Character
@@ -220,6 +266,28 @@ function HUDController:_damagePopup(payload: any)
 	task.delay(0.5, function()
 		l:Destroy()
 	end)
+end
+
+function HUDController:_announce(payload: any)
+	if typeof(payload) ~= "table" then
+		return
+	end
+	local msg = tostring(payload.Message or "")
+	if msg ~= "" then
+		print("[Latch]", msg)
+		self:_flashAnnounce(msg)
+	end
+end
+
+function HUDController:_flashAnnounce(msg: string)
+	if self._labels.Announce then
+		self._labels.Announce.Text = msg
+		task.delay(4, function()
+			if self._labels.Announce and self._labels.Announce.Text == msg then
+				self._labels.Announce.Text = ""
+			end
+		end)
+	end
 end
 
 return HUDController
