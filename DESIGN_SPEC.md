@@ -26,12 +26,13 @@ README.md            -- how to open with Rojo + Roblox Studio
 aftman.toml / wally.toml if useful
 ```
 
-## Match loop (MVP)
-1. Lobby placeholder (can be a simple spawn area + UI "Queue 1v1" / "Queue 2v2")
-2. Match starts → first to 5 round wins
-3. Round: eliminate all enemies on the opposing team; survivors win the round
-4. Between rounds: short freeze/reset, refill ammo/health, keep operator
-5. Modes for MVP: **1v1** and **2v2** only (4v4 can stub later)
+## Match loop
+1. Lobby (`LobbyBuilder`) — pads + mode menu queue
+2. Queue fill (bot fill timers) → map vote → operator+loadout lock (8s) → countdown
+3. Round modes: eliminate opposing team; first to 5 round wins
+4. Continuous modes: FFA / TDM / Gun Cycle with timed respawn
+5. Match recap stub → return to lobby
+6. Modes: see Phase 3 (`Config/Modes.lua`)
 
 ## Movement
 - Walk, sprint (or Roblox default run), crouch, **slide** (crouch while sprinting), jump
@@ -76,9 +77,9 @@ Each: `Id`, `DisplayName`, `ActiveAbility`, `Passive`, cooldowns, simple VFX hoo
 - Short lifetimes; pool/reuse where easy
 - No camera shake spam, no full-screen bloom
 
-## Maps (Phase 1)
-Six code-generated Parts arenas via `MapService` / `Services/Maps/*` (see Phase 1 section below).
-Lobby keeps a simple `ArenaBuilder` space for ambient bots. Match loads a voted map with SpawnA/SpawnB, cover tags, bot nav nodes, kill floor, and lighting.
+## Maps (Phase 1) + Lobby (Phase 3)
+Six code-generated Parts arenas via `MapService` / `Services/Maps/*`.
+Lobby is a real `LobbyBuilder` space (pads, kiosk stubs, alcove) with ambient bots. Match loads a voted map with SpawnA/SpawnB, cover tags, bot nav nodes, kill floor, and lighting.
 
 ## UI (MVP)
 - Crosshair
@@ -88,13 +89,13 @@ Lobby keeps a simple `ArenaBuilder` space for ambient bots. Match loads a voted 
 - Round score (e.g. 2–1)
 - Operator select before match (simple buttons)
 
-## Out of scope for first PR / first commit set
+## Out of scope (still later)
 - Ranked / ELO
-- Monetization / skins shop
+- Monetization / skins shop / Tokens economy (Phase 4)
 - Full lobby cosmetics
-- 4v4 / FFA / Gun Game
+- Real party sync (Ready Together is a soft stub in Phase 3)
 - Complex animation packs
-- Voice / party systems
+- Voice chat
 
 ## Success criteria
 1. Rojo project syncs cleanly; README explains Studio + Rojo workflow
@@ -191,3 +192,27 @@ Ids keep `AssaultRifle` / `Pistol` / `Knife` / `FragGrenade` for the defaults so
 
 ### Remotes added
 `SetLoadout`, `FlashEffect`, `KillFeed` (via `Remotes.lua` only)
+
+
+## Phase 3 — Modes, lobby pads, menu queue (implemented)
+
+### Config
+- `Config/Modes.lua` — 1v1, 2v2, 3v3, 4v4 (first to 5 rounds); FFA (first to 7 elims, **respawn 3s**); TDM (score to 30, mid-match respawn); Gun Cycle (fixed weapon list, elim advances); Beginner 2v2 (Recruit bots, damage taken −15%); Casual Mix (resolves to random casual mode)
+- `MatchSettings.OperatorLockSeconds = 8`, `MatchRecapSeconds = 8`
+
+### MatchService
+- Extended (not forked) for all modes; generalized bot fill via `FillSeconds` / `FillTarget`; team sizes 3 and 4 supported
+- Flow: Queue → MapVote → **OperatorLock** → Countdown → rounds/continuous → **MatchRecap** → Lobby
+- FFA/GunCycle use unique per-fighter team ids (`F{userId}`) so `_sameTeam` / bot targeting work
+- Stats (K/D/damage) tracked in WeaponService for recap; Tokens/XP are 0 placeholders until Phase 4
+
+### Lobby
+- `LobbyBuilder` (+ `ArenaBuilder` facade): central floor, shop/pass/contract/leaderboard stubs, operator alcove, Ready Together party **soft stub**
+- Queue pads with original colors + ProximityPrompt; LobbyController menu for mobile
+- LobbyBotDirector wanders between pads and lingers (visual queue join)
+
+### Remotes
+- `MatchRecap`, `RequestLeaveQueue` (via `Remotes.lua` only)
+
+### Client
+- `LobbyController`, `MatchRecapController`; OperatorSelect slimmed to operator picks; queue UI on the right

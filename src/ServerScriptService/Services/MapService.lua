@@ -1,7 +1,7 @@
 --!strict
 --[[
 	MapService — load/clear match maps, lighting, spawns, bot waypoints/cover, map vote.
-	Lobby space stays via ArenaBuilder (LatchArena); match arenas are Parts maps (LatchMap).
+	Lobby space stays via LobbyBuilder/ArenaBuilder (LatchArena); match arenas are Parts maps (LatchMap).
 ]]
 
 local Lighting = game:GetService("Lighting")

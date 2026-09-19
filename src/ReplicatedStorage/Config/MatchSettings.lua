@@ -1,19 +1,27 @@
 --!strict
 --[[
-	MatchSettings — round/match timing and mode rules.
-	Balance numbers live here only.
+	MatchSettings — round/match timing and shared rules.
+	Per-mode win/fill/respawn live in Config/Modes.lua (Phase 3).
 ]]
 
 local MatchSettings = {
+	-- Legacy defaults (round modes still read Modes.WinTarget; these are fallbacks)
 	RoundsToWin = 5,
 	RoundFreezeSeconds = 3,
 	BetweenRoundSeconds = 4,
 	MatchStartCountdown = 3,
 	RespawnInvulnSeconds = 1.5,
 
-	-- Queue fill: after this many seconds without enough humans, fill with bots
+	-- After map vote: operator + loadout lock window before countdown
+	OperatorLockSeconds = 8,
+
+	-- Match end recap display before returning to lobby
+	MatchRecapSeconds = 8,
+
+	-- Legacy fill timers (Modes.FillSeconds preferred)
 	FillTimer1v1Seconds = 3,
 	FillTimer2v2Seconds = 4,
+	FillTimerDefaultSeconds = 5,
 
 	-- Map vote window after queue fills (Phase 1)
 	MapVoteSeconds = 8,
@@ -22,6 +30,7 @@ local MatchSettings = {
 	LobbyBotMin = 6,
 	LobbyBotMax = 12,
 
+	-- Kept for older callers; prefer Config/Modes.lua
 	Modes = {
 		Duel1v1 = {
 			Id = "1v1",

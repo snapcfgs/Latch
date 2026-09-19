@@ -91,6 +91,10 @@ function WeaponService.new(remotes: { [string]: RemoteEvent }, deps: { [string]:
 		_states = {} :: { [number]: WeaponState },
 		_onKill = nil :: ((Actor, Actor) -> ())?,
 		_botFromCharacter = nil :: ((Model) -> BotRecord?)?,
+		-- Phase 3
+		_damageTakenMult = {} :: { [number]: number },
+		_gunCycleLocked = {} :: { [number]: boolean },
+		_stats = {} :: { [number]: { Kills: number, Deaths: number, Damage: number } },
 	}, WeaponService)
 	return self
 end
@@ -255,10 +259,20 @@ function WeaponService:_applyDamage(attacker: Actor, victim: Actor, amount: numb
 		return
 	end
 
+	local victimId = ActorUtil.UserId(victim)
+	local attackerId = ActorUtil.UserId(attacker)
+	local takenMult = self._damageTakenMult[victimId]
+	if typeof(takenMult) == "number" and takenMult ~= 1 then
+		amount = amount * takenMult
+	end
+
 	local before = hum.Health
 	hum:TakeDamage(amount)
+	local dealt = math.max(0, before - hum.Health)
+	self:_addStat(attackerId, "Damage", dealt)
+
 	self._remotes.DamageNumber:FireAllClients({
-		TargetUserId = ActorUtil.UserId(victim),
+		TargetUserId = victimId,
 		Amount = math.floor(amount + 0.5),
 		Headshot = headshot,
 		Position = if char:FindFirstChild("Head") then (char.Head :: BasePart).Position else nil,
@@ -273,6 +287,8 @@ function WeaponService:_applyDamage(attacker: Actor, victim: Actor, amount: numb
 
 	if before > 0 and hum.Health <= 0 then
 		ActorUtil.SetAttribute(victim, Constants.AttributeAlive, false)
+		self:_addStat(attackerId, "Kills", 1)
+		self:_addStat(victimId, "Deaths", 1)
 		local cfg = WeaponsConfig.Weapons[weaponId :: any]
 		local weaponName = if cfg then cfg.DisplayName else weaponId
 		if self._remotes.KillFeed then
@@ -370,6 +386,9 @@ end
 function WeaponService:_onSwitch(player: Player, weaponId: any)
 	if typeof(weaponId) ~= "string" then
 		return
+	end
+	if self._gunCycleLocked[player.UserId] then
+		return -- Gun Cycle locks weapon switches
 	end
 	if not WeaponsConfig.Weapons[weaponId :: any] then
 		return
@@ -799,6 +818,95 @@ end
 function WeaponService:GetEquipped(actor: Actor): string?
 	local state = self._states[ActorUtil.UserId(actor)]
 	return if state then state.Equipped else nil
+end
+
+-- Phase 3 helpers -----------------------------------------------------------
+
+function WeaponService:_ensureStat(uid: number)
+	if not self._stats[uid] then
+		self._stats[uid] = { Kills = 0, Deaths = 0, Damage = 0 }
+	end
+end
+
+function WeaponService:_addStat(uid: number, key: string, amount: number)
+	self:_ensureStat(uid)
+	local s = self._stats[uid]
+	if key == "Kills" then
+		s.Kills += amount
+	elseif key == "Deaths" then
+		s.Deaths += amount
+	elseif key == "Damage" then
+		s.Damage += amount
+	end
+end
+
+function WeaponService:ResetMatchStats()
+	self._stats = {}
+end
+
+function WeaponService:GetMatchStats(): { [number]: { Kills: number, Deaths: number, Damage: number } }
+	return self._stats
+end
+
+function WeaponService:GetActorStats(actor: Actor): { Kills: number, Deaths: number, Damage: number }
+	local uid = ActorUtil.UserId(actor)
+	self:_ensureStat(uid)
+	local s = self._stats[uid]
+	return { Kills = s.Kills, Deaths = s.Deaths, Damage = s.Damage }
+end
+
+function WeaponService:SetDamageTakenMult(actor: Actor, mult: number)
+	self._damageTakenMult[ActorUtil.UserId(actor)] = mult
+end
+
+function WeaponService:ClearDamageTakenMults()
+	self._damageTakenMult = {}
+end
+
+--[[ Force a single weapon for Gun Cycle (locks switches). ]]
+function WeaponService:ForceGunCycleWeapon(actor: Actor, weaponId: string)
+	local cfg = WeaponsConfig.Weapons[weaponId :: any]
+	if not cfg then
+		return
+	end
+	local uid = ActorUtil.UserId(actor)
+	local state = self._states[uid]
+	if not state then
+		self:SetupActor(actor, false)
+		state = self._states[uid]
+	end
+	if not state then
+		return
+	end
+	-- Mirror weapon into every slot so _inLoadout / fire paths stay happy
+	local slot = cfg.Slot
+	local loadout = {
+		Primary = if slot == "Primary" then weaponId else weaponId,
+		Secondary = if slot == "Secondary" then weaponId else weaponId,
+		Melee = if slot == "Melee" then weaponId else weaponId,
+		Utility = state.Loadout.Utility,
+	}
+	if slot == "Utility" then
+		loadout.Utility = weaponId
+	end
+	-- Keep non-matching slots as the cycle weapon too (single-weapon mode)
+	loadout.Primary = weaponId
+	loadout.Secondary = weaponId
+	loadout.Melee = weaponId
+	state.Loadout = loadout
+	state.Equipped = weaponId
+	local ammo = state.Ammo[weaponId]
+	if ammo then
+		ammo.Mag = cfg.MagSize
+		ammo.Reserve = cfg.ReserveAmmo
+		ammo.Reloading = false
+	end
+	self._gunCycleLocked[uid] = true
+	self:_syncActorState(actor)
+end
+
+function WeaponService:ClearGunCycleLocks()
+	self._gunCycleLocked = {}
 end
 
 return WeaponService

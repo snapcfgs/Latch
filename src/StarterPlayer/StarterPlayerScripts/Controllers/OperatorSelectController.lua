@@ -1,5 +1,5 @@
 --!strict
---[[ Operator select + lobby queue UI. ]]
+--[[ Operator select UI (lobby). Queue lives in LobbyController (Phase 3). ]]
 
 local Players = game:GetService("Players")
 
@@ -27,7 +27,8 @@ function OperatorSelectController:Init()
 			return
 		end
 		local phase = snap.Phase
-		local show = phase == "Lobby" or phase == "MatchEnd" -- hidden during MapVote / match
+		-- Visible in Lobby + OperatorLock (pre-countdown pick) + MatchRecap fade
+		local show = phase == "Lobby" or phase == "OperatorLock" or phase == "MatchEnd"
 		self:_setVisible(show)
 	end)
 end
@@ -44,19 +45,19 @@ function OperatorSelectController:_build()
 	gui.Name = "LatchOperatorSelect"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 6
 	gui.Parent = playerGui
 	self._gui = gui
 
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
-	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.Position = UDim2.fromScale(0.5, 0.45)
-	panel.Size = UDim2.fromOffset(420, 360)
+	panel.AnchorPoint = Vector2.new(0, 0.5)
+	panel.Position = UDim2.new(0, 16, 0.5, 0)
+	panel.Size = UDim2.fromOffset(280, 280)
 	panel.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
 	panel.BackgroundTransparency = 0.15
 	panel.BorderSizePixel = 0
 	panel.Active = true
-	panel.Modal = true -- keep mouse free for lobby clicks in Studio
 	panel.Parent = gui
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
@@ -67,15 +68,15 @@ function OperatorSelectController:_build()
 	title.Size = UDim2.new(1, 0, 0, 36)
 	title.Position = UDim2.fromOffset(0, 8)
 	title.Font = Enum.Font.GothamBold
-	title.TextSize = 22
+	title.TextSize = 18
 	title.TextColor3 = Color3.new(1, 1, 1)
-	title.Text = "LATCH — Pick Operator"
+	title.Text = "OPERATOR"
 	title.Parent = panel
 
 	local list = Instance.new("Frame")
 	list.BackgroundTransparency = 1
-	list.Position = UDim2.fromOffset(16, 50)
-	list.Size = UDim2.new(1, -32, 0, 200)
+	list.Position = UDim2.fromOffset(12, 48)
+	list.Size = UDim2.new(1, -24, 1, -60)
 	list.Parent = panel
 	local layout = Instance.new("UIListLayout")
 	layout.Padding = UDim.new(0, 8)
@@ -88,7 +89,7 @@ function OperatorSelectController:_build()
 		btn.BackgroundColor3 = Color3.fromRGB(40, 50, 70)
 		btn.TextColor3 = Color3.new(1, 1, 1)
 		btn.Font = Enum.Font.Gotham
-		btn.TextSize = 15
+		btn.TextSize = 14
 		btn.TextXAlignment = Enum.TextXAlignment.Left
 		btn.Text = string.format("  %s — %s", cfg.DisplayName, cfg.ActiveName)
 		btn.Parent = list
@@ -100,37 +101,6 @@ function OperatorSelectController:_build()
 			title.Text = "Selected: " .. cfg.DisplayName
 		end)
 	end
-
-	local queueRow = Instance.new("Frame")
-	queueRow.BackgroundTransparency = 1
-	queueRow.Position = UDim2.fromOffset(16, 270)
-	queueRow.Size = UDim2.new(1, -32, 0, 70)
-	queueRow.Parent = panel
-	local qLayout = Instance.new("UIListLayout")
-	qLayout.FillDirection = Enum.FillDirection.Horizontal
-	qLayout.Padding = UDim.new(0, 12)
-	qLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	qLayout.Parent = queueRow
-
-	local function queueBtn(text: string, modeId: string)
-		local b = Instance.new("TextButton")
-		b.Size = UDim2.fromOffset(160, 48)
-		b.BackgroundColor3 = Color3.fromRGB(50, 140, 90)
-		b.TextColor3 = Color3.new(1, 1, 1)
-		b.Font = Enum.Font.GothamBold
-		b.TextSize = 18
-		b.Text = text
-		b.Parent = queueRow
-		local c = Instance.new("UICorner")
-		c.CornerRadius = UDim.new(0, 8)
-		c.Parent = b
-		b.MouseButton1Click:Connect(function()
-			self._remotes.RequestQueue:FireServer(modeId)
-			title.Text = "Queued " .. modeId .. "…"
-		end)
-	end
-	queueBtn("Queue 1v1", "1v1")
-	queueBtn("Queue 2v2", "2v2")
 end
 
 return OperatorSelectController

@@ -33,4 +33,4 @@ matchService:SetBotService(botService)
 matchService:SetMapService(mapService)
 matchService:Init()
 
-print("[Latch] Server bootstrap complete (Phase 2 weapons)")
+print("[Latch] Server bootstrap complete (Phase 3 modes + lobby)")

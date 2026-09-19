@@ -36,7 +36,7 @@ function LoadoutController:Init()
 			return
 		end
 		local phase = snap.Phase
-		local show = phase == "Lobby" or phase == "MatchEnd"
+		local show = phase == "Lobby" or phase == "OperatorLock" or phase == "MatchEnd"
 		self:_setVisible(show)
 	end)
 end

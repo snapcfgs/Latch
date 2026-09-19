@@ -54,10 +54,12 @@ function Hollow.Build(): Folder
 		CFrame.new(-52, 1, -12) * CFrame.Angles(0, math.rad(90), 0),
 		CFrame.new(-52, 1, 12) * CFrame.Angles(0, math.rad(90), 0),
 		CFrame.new(-48, 10, 0) * CFrame.Angles(0, math.rad(90), 0),
+		CFrame.new(-50, 1, 0) * CFrame.Angles(0, math.rad(90), 0),
 	}, {
 		CFrame.new(52, 1, 12) * CFrame.Angles(0, math.rad(-90), 0),
 		CFrame.new(52, 1, -12) * CFrame.Angles(0, math.rad(-90), 0),
 		CFrame.new(48, 10, 0) * CFrame.Angles(0, math.rad(-90), 0),
+		CFrame.new(50, 1, 0) * CFrame.Angles(0, math.rad(-90), 0),
 	})
 
 	MapBuildUtil.PlaceWaypointGrid(root, -50, 50, -36, 36, 12, 1.5)

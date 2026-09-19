@@ -42,7 +42,11 @@ local RemoteNames = {
 	"MapVoteCast",
 	"MapVoteUpdate",
 	"MapVoteResult",
+	-- Lobby / modes / recap (Phase 3)
+	"MatchRecap",
+	"RequestLeaveQueue",
 }
+
 
 export type RemotesMap = { [string]: RemoteEvent }
 

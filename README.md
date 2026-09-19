@@ -1,7 +1,7 @@
 # Latch
 
 Competitive arena FPS (Roblox) made by Sven.  
-Fast 1v1 / 2v2, first to 5 rounds, shared loadout + Operator abilities. Built as a **Rojo + Luau** MVP with seamless **PC + mobile** controls. Inspired by arena FPS games such as Rivals — original operators, weapons, and IP only.
+Multi-mode arena (1v1–4v4, FFA, TDM, Gun Cycle, Beginner), shared loadout + Operator abilities. Built as a **Rojo + Luau** MVP with seamless **PC + mobile** controls. Inspired by arena FPS games such as Rivals — original operators, weapons, and IP only.
 
 ## Requirements
 
@@ -27,8 +27,8 @@ Project file: `default.project.json` maps `src/` → `ReplicatedStorage`, `Serve
 
 ## How to play (PC)
 
-1. Pick an Operator on the lobby panel.
-2. **Queue 1v1** or **Queue 2v2**.
+1. Pick an Operator on the left lobby panel (loadout panel also available).
+2. **Queue** from the right mode menu **or** walk onto a colored queue pad (ProximityPrompt / touch).
 3. Controls:
    - **Mouse1** fire / melee / throw (depends on equipped)
    - **1–4** weapon slots (loadout primary/secondary/melee/utility) · **RMB** ADS
@@ -36,19 +36,22 @@ Project file: `default.project.json` maps `src/` → `ReplicatedStorage`, `Serve
    - **Shift** sprint · **C / Ctrl** crouch · crouch while sprinting = **slide**
    - **Space** jump
 
-### Solo Studio Play (Phase 0 bots)
+### Solo Studio Play (bots)
 
-Solo Play is a **real first-to-5 match vs AI**, not a practice sandbox:
+Solo Play is a **real match vs AI**, not a practice sandbox. Bot fill timers are per-mode (`Config/Modes.lua` → `FillSeconds` / `FillTarget`):
 
-| Mode | Fill rule |
-|------|-----------|
-| **1v1** | After **3s** without a second human, a bot opponent is added and the match starts |
-| **2v2** | After **4s**, remaining slots are filled with bots |
+| Mode | Fill (approx) |
+|------|----------------|
+| **1v1** | 3s → fill to 2 |
+| **2v2 / Beginner 2v2** | 4s → fill to 4 |
+| **3v3** | 5s → fill to 6 |
+| **4v4 / TDM** | 6s → fill toward team sizes / FillTarget |
+| **FFA / Gun Cycle** | 5s → fill to **FillTarget 4** (max 8) |
 
-- Rounds end when one team has **0 alive** (humans + bots). There is no “empty team B” practice skip.
-- Lobby keeps **6–12** ambient bots wandering between spawn pads / waypoints.
-- If a human joins mid-fill or early match, they **replace the lowest-difficulty** stand-in on a team; HUD prints a stand-in replaced announcement.
-- Bot names look like `Volt#4821`. Difficulties: **Recruit / Standard / Sweat** (`Config/Bots.lua`).
+- Round modes: rounds end when one team has **0 alive** (humans + bots). No empty-team practice skip.
+- Lobby keeps **6–12** ambient bots wandering between **queue pads** / waypoints (visual queue join).
+- Mid-match human join replaces the lowest-difficulty stand-in; HUD announces it.
+- Bot names look like `Volt#4821`. Difficulties: **Recruit / Standard / Sweat** (`Config/Bots.lua`). Beginner mode forces **Recruit**.
 
 ## How to playtest mobile
 
@@ -92,11 +95,12 @@ Six original code-built arenas (Parts only, no `.rbxm`):
 | **Glassline** | Medium | Office atrium, non-breakable glass Parts |
 | **Ridge** | Large | Outdoor canyon (room for 3v3/4v4 later) |
 
-### Match flow
-1. Queue fills (humans and/or bot fill timers from Phase 0)
-2. **Map vote** — 3 random maps, **8s** timer; bots vote weighted toward variety; last-played map is less likely
-3. Winning map loads via `MapService` (lobby `LatchArena` is parked)
-4. Existing countdown → rounds → match end → return to lobby
+### Match flow (Phase 3)
+1. Queue fills (humans and/or bot fill timers)
+2. **Map vote** — 3 random maps, **8s**; bots vote for variety; last-played down-weighted
+3. Winning map loads via `MapService` (lobby `LatchArena` parked)
+4. **Operator + loadout lock** — **8s**
+5. Countdown → rounds / continuous match → **match recap** (K/D, damage; Tokens/XP stubs) → lobby
 
 ### How to test
 1. `rojo serve` + Play Solo
@@ -132,6 +136,36 @@ Default loadout: **Pulse AR / Sidearm / Blade / Frag**.
 
 Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. Loadout UI: `LoadoutController` (Phase 4 Token gates later).
 
+
+## Phase 3 — Modes, lobby, pads, menu queue
+
+### Modes (`Config/Modes.lua`)
+
+| Mode | Win rule | Notes |
+|------|----------|-------|
+| **1v1 / 2v2 / 3v3 / 4v4** | First to **5** rounds | Team elimination rounds |
+| **FFA** | First to **7** eliminations | **Respawn 3s** (fixed rule) |
+| **Team Deathmatch** | Team score to **30** | Mid-match respawn 3s |
+| **Gun Cycle** | Finish fixed weapon list | Kill advances weapon; respawn 3s |
+| **Beginner 2v2** | First to 5 rounds | Bots **Recruit**, damage taken **−15%** |
+| **Casual Mix** | (resolved at start) | Random among 2v2 / FFA / TDM / Gun Cycle |
+
+### Lobby
+- `LobbyBuilder` builds `LatchArena`: central plaza, shop/pass/contract/leaderboard stubs, operator alcove, **Ready Together** party stub
+- **Queue pads** (original colors): 1v1, 2v2, 3v3, 4v4, FFA, Casual Mix — step on / ProximityPrompt to queue
+- **LobbyController** mode menu (mobile-friendly; no walking required)
+- Lobby bots wander between pads and linger (visual queue join)
+
+### Client
+- `LobbyController`, `MatchRecapController`
+- Remotes: `MatchRecap`, `RequestLeaveQueue` (via `Remotes.lua` only)
+
+### How to test
+1. `rojo serve` + Play Solo
+2. Queue **3v3 / 4v4 / FFA / TDM / GunCycle / Beginner** from the right menu (or a pad)
+3. Confirm bot fill → map vote → 8s operator lock → match → recap → lobby
+4. FFA: confirm 3s respawn and first-to-7; Gun Cycle: weapon advances on elim
+
 ## Architecture
 
 - Custom bootstrap (no Knit): `Bootstrap.server.lua` / `Bootstrap.client.lua`
@@ -139,7 +173,7 @@ Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. 
 - **BotService** drives AI stand-ins through the same `WeaponService:ServerFire` / `AbilityService:ServerUse` paths as players (`ActorUtil` unifies Player | BotRecord)
 - Hitscan guns use server raycasts; Splice panels pierce for allies (see comments in `AbilityService`)
 - VFX: Parts / Beams / Highlights only — budget helpers in `Util/VFX.lua`
-- Lobby arena: `ArenaBuilder` (waypoints for lobby bots)
+- Lobby: `LobbyBuilder` / `ArenaBuilder` facade (pads, kiosks, waypoints)
 - Match arenas: `MapService` + `Services/Maps/*` (spawns, cover tags, bot waypoints/cover nodes, lighting, kill floor)
 
 ## Known MVP gaps
@@ -147,7 +181,7 @@ Config: `Config/Weapons.lua`. Remotes: `SetLoadout`, `FlashEffect`, `KillFeed`. 
 - Bot AI is competent but not tournament-level (no grenade throws / advanced peeks yet)
 - Splice blocks **movement** for everyone; only **bullets** are one-way for allies
 - Anchor explosive resistance is an attribute stub (no knockback system yet)
-- 4v4 / ranked still later; shotgun + utilities are in Phase 2
+- Ranked / ELO still later; Tokens/XP economy is Phase 4
 - First-person zoom lock is a simple camera distance clamp
 - Lobby bot “emotes” are Billboard stubs
 

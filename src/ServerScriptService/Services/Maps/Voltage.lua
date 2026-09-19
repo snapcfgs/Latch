@@ -55,10 +55,12 @@ function Voltage.Build(): Folder
 		CFrame.new(-40, 10, -10) * CFrame.Angles(0, math.rad(90), 0),
 		CFrame.new(-40, 10, 10) * CFrame.Angles(0, math.rad(90), 0),
 		CFrame.new(-36, 15, 0) * CFrame.Angles(0, math.rad(90), 0),
+		CFrame.new(-38, 10, 0) * CFrame.Angles(0, math.rad(90), 0),
 	}, {
 		CFrame.new(40, 10, 10) * CFrame.Angles(0, math.rad(-90), 0),
 		CFrame.new(40, 10, -10) * CFrame.Angles(0, math.rad(-90), 0),
 		CFrame.new(36, 15, 0) * CFrame.Angles(0, math.rad(-90), 0),
+		CFrame.new(38, 10, 0) * CFrame.Angles(0, math.rad(-90), 0),
 	})
 
 	MapBuildUtil.PlaceWaypointGrid(root, -42, 42, -16, 16, 10, 10)

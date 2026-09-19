@@ -149,6 +149,25 @@ function BotService:RefreshNav()
 end
 
 function BotService:_resolveSpawns(teamId: string): { SpawnLocation }
+	local function mergeAB(): { SpawnLocation }
+		local a = if self._maps and self._maps:IsMatchMapLoaded() then self._maps:GetSpawns("A") else ArenaBuilder.GetSpawns("A")
+		local b = if self._maps and self._maps:IsMatchMapLoaded() then self._maps:GetSpawns("B") else ArenaBuilder.GetSpawns("B")
+		local merged: { SpawnLocation } = {}
+		for _, s in a do
+			table.insert(merged, s)
+		end
+		for _, s in b do
+			table.insert(merged, s)
+		end
+		return merged
+	end
+	-- FFA unique teams start with "F"
+	if string.sub(teamId, 1, 1) == "F" then
+		local merged = mergeAB()
+		if #merged > 0 then
+			return merged
+		end
+	end
 	if self._maps and self._maps:IsMatchMapLoaded() then
 		local spawns = self._maps:GetSpawns(teamId)
 		if #spawns > 0 then
@@ -675,7 +694,7 @@ function BotService:_tickLobbyBot(bot: BotRecord, brain: BotBrain, now: number)
 	hum.WalkSpeed = BotsConfig.LobbyWanderSpeed
 
 	if now < brain.EmoteUntil then
-		-- Sit / idle emote stub
+		-- Sit / idle emote stub — looks like "joined" a queue pad
 		if hum.Sit ~= true and math.random() < 0.02 then
 			hum.Sit = true
 			task.delay(2, function()
@@ -691,7 +710,6 @@ function BotService:_tickLobbyBot(bot: BotRecord, brain: BotBrain, now: number)
 		brain.NextDecisionAt = now + math.random(2, 5)
 		if math.random() < 0.15 then
 			brain.EmoteUntil = now + math.random(2, 4)
-			-- Billboard pulse as simple emote
 			local head = bot.Character and bot.Character:FindFirstChild("Head")
 			if head then
 				local flash = Instance.new("BillboardGui")
@@ -709,9 +727,29 @@ function BotService:_tickLobbyBot(bot: BotRecord, brain: BotBrain, now: number)
 			end
 			return
 		end
-		if #self._waypoints > 0 then
+		-- Prefer queue pads ~55% of the time (visual "joining" queues)
+		local pads = ArenaBuilder.GetPadPositions and ArenaBuilder.GetPadPositions() or {}
+		if #pads > 0 and math.random() < 0.55 then
+			local pad = pads[math.random(1, #pads)]
+			-- Store as synthetic waypoint via Position override on brain using WaypointIndex = 0 + TargetPad
+			brain.WaypointIndex = 0
+			;(brain :: any).PadTarget = pad.Position
+			;(brain :: any).PadModeId = pad.ModeId
+		elseif #self._waypoints > 0 then
 			brain.WaypointIndex = math.random(1, #self._waypoints)
+			;(brain :: any).PadTarget = nil
 		end
+	end
+
+	local padTarget = (brain :: any).PadTarget :: Vector3?
+	if padTarget then
+		self:_moveToward(bot, padTarget)
+		-- Linger on pad = visual queue join
+		if (root.Position - padTarget).Magnitude < 4 then
+			brain.EmoteUntil = now + math.random(3, 6)
+			;(brain :: any).PadTarget = nil
+		end
+		return
 	end
 
 	local wp = self._waypoints[brain.WaypointIndex]

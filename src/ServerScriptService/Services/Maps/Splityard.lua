@@ -54,10 +54,12 @@ function Splityard.Build(): Folder
 		CFrame.new(-40, 1.5, -8) * CFrame.Angles(0, math.rad(90), 0),
 		CFrame.new(-40, 1.5, 8) * CFrame.Angles(0, math.rad(90), 0),
 		CFrame.new(-38, 1.5, 0) * CFrame.Angles(0, math.rad(90), 0),
+		CFrame.new(-36, 1.5, -16) * CFrame.Angles(0, math.rad(90), 0),
 	}, {
 		CFrame.new(40, 1.5, 8) * CFrame.Angles(0, math.rad(-90), 0),
 		CFrame.new(40, 1.5, -8) * CFrame.Angles(0, math.rad(-90), 0),
 		CFrame.new(38, 1.5, 0) * CFrame.Angles(0, math.rad(-90), 0),
+		CFrame.new(36, 1.5, 16) * CFrame.Angles(0, math.rad(-90), 0),
 	})
 
 	MapBuildUtil.PlaceWaypointGrid(root, -42, 42, -28, 28, 12, 1.5)

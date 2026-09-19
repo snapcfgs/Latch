@@ -31,6 +31,10 @@ function HUDController.new(remotes: { [string]: RemoteEvent }, weaponController:
 			Phase = "Lobby",
 			RoundNumber = 0,
 			RoundsToWin = 5,
+			WinType = "Rounds",
+			WinTarget = 5,
+			IsFFA = false,
+			ModeId = "1v1",
 		},
 	}, HUDController)
 	return self
@@ -205,12 +209,40 @@ end
 function HUDController:_refresh()
 	local snap = self._snapshot
 	if self._labels.Score then
-		self._labels.Score.Text = string.format("%d — %d", snap.ScoreA or 0, snap.ScoreB or 0)
+		local winType = snap.WinType or "Rounds"
+		local modeId = tostring(snap.ModeId or "")
+		if winType == "Eliminations" or winType == "GunCycle" or snap.IsFFA then
+			-- Show local player's elim / gun progress
+			local myElims = 0
+			local myGun = nil
+			local fighters = snap.Fighters
+			if typeof(fighters) == "table" then
+				for _, f in fighters do
+					if typeof(f) == "table" and f.UserId == player.UserId then
+						myElims = tonumber(f.Elims) or 0
+						myGun = f.GunIndex
+						break
+					end
+				end
+			end
+			local target = snap.WinTarget or 7
+			if winType == "GunCycle" then
+				self._labels.Score.Text = string.format("GUN %s/%s", tostring(myGun or 1), tostring(target))
+			else
+				self._labels.Score.Text = string.format("%d / %d", myElims, target)
+			end
+		elseif winType == "TeamScore" then
+			local target = snap.WinTarget or 30
+			self._labels.Score.Text = string.format("%d — %d  (to %d)", snap.ScoreA or 0, snap.ScoreB or 0, target)
+		else
+			self._labels.Score.Text = string.format("%d — %d", snap.ScoreA or 0, snap.ScoreB or 0)
+		end
 	end
 	if self._labels.Phase then
 		local phase = snap.Phase or "Lobby"
 		local round = snap.RoundNumber or 0
-		local text = string.upper(tostring(phase)) .. (if round > 0 then ("  R" .. tostring(round)) else "")
+		local modeBit = if typeof(snap.ModeId) == "string" and snap.ModeId ~= "" then ("  " .. tostring(snap.ModeId)) else ""
+		local text = string.upper(tostring(phase)) .. modeBit .. (if round > 0 then ("  R" .. tostring(round)) else "")
 		if typeof(snap.CurrentMapId) == "string" and (snap.CurrentMapId :: string) ~= "" then
 			text = text .. "  ·  " .. (snap.CurrentMapId :: string)
 		end
