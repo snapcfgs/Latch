@@ -1,6 +1,19 @@
 --!strict
 --[[
 	AbilityService — rate-limited operator actives with real behavior.
+	Actors: Player | BotRecord via ActorUtil.
+
+	==========================================================================
+	Validation model (Phase 7 — light anti-cheat)
+	==========================================================================
+	• Cooldown: _cooldowns[userId] is server-authoritative. Client UseAbility is
+	  ignored while now < readyAt. Bots call ServerUse through the same gate.
+	• Skid dash: speed clamped so speed*duration ≤ DashMaxDistance; raycast shortens
+	  duration on walls (AntiCheatUtil). No client-reported dash distance accepted.
+	• Origin: rebase if >25 studs from root. LookDirection required.
+	• Damage from Fuse sticky: via WeaponService:DealDamage (server), never client.
+	• Movement: SlideState is notify-only — do NOT rubber-band legitimate slides.
+	==========================================================================
 
 	==========================================================================
 	Splice CollisionGroups (Phase 5 — allies walk AND shoot through)
@@ -31,8 +44,6 @@
 
 	Enemy walk + shoot: blocked by physics collision and raycast respectively.
 	==========================================================================
-
-	Actors: Player | BotRecord via ActorUtil.
 ]]
 
 local Players = game:GetService("Players")
@@ -45,6 +56,7 @@ local OperatorsConfig = require(game.ReplicatedStorage.Config.Operators)
 local Constants = require(game.ReplicatedStorage.Shared.Constants)
 local VFX = require(game.ReplicatedStorage.Util.VFX)
 local ActorUtil = require(script.Parent.ActorUtil)
+local AntiCheatUtil = require(script.Parent.AntiCheatUtil)
 
 type Actor = ActorUtil.Actor
 type BotRecord = ActorUtil.BotRecord
@@ -221,7 +233,7 @@ function AbilityService:ServerUse(actor: Actor, payload: any)
 	if not char or not root then
 		return
 	end
-	if typeof(origin) ~= "Vector3" or (origin - root.Position).Magnitude > 25 then
+	if typeof(origin) ~= "Vector3" or (origin - root.Position).Magnitude > AntiCheatUtil.ABILITY_ORIGIN_REBASE_STUDS then
 		origin = root.Position
 	end
 
@@ -266,6 +278,8 @@ function AbilityService:_skid(_actor: Actor, char: Model, root: BasePart, dir: V
 	local duration = cfg.DashDuration or 0.22
 	local speed = cfg.DashSpeed or 80
 	local maxDist = cfg.DashMaxDistance or 28
+	-- Phase 7: hard-cap speed so speed*duration cannot exceed DashMaxDistance
+	speed = AntiCheatUtil.ClampDashSpeed(speed, duration, maxDist)
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -273,6 +287,10 @@ function AbilityService:_skid(_actor: Actor, char: Model, root: BasePart, dir: V
 	local hit = Workspace:Raycast(root.Position, flat * maxDist, params)
 	local travel = if hit then math.max(0, (hit.Position - root.Position).Magnitude - 2) else maxDist
 	travel = math.min(travel, maxDist)
+	duration = AntiCheatUtil.ClampDashDuration(duration, travel, speed)
+	if duration <= 0 or travel < 0.5 then
+		return false
+	end
 
 	VFX.DashTrail(root.Position, flat, travel)
 	VFX.BeamStreak(root.Position, root.Position + flat * travel, Color3.fromRGB(80, 200, 255))

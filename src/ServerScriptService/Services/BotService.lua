@@ -1,7 +1,8 @@
 --!strict
 --[[
 	BotService — AI stand-ins for solo / undersized queues + lobby wanderers.
-	Bots use the same WeaponService / AbilityService server APIs as players.
+	Bots use the same WeaponService / AbilityService server APIs as players
+	(ServerFire / ServerUse) so Phase 7 fire-rate + cooldown validation applies equally.
 ]]
 
 local Players = game:GetService("Players")

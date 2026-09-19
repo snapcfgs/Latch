@@ -71,4 +71,4 @@ for _, p in game:GetService("Players"):GetPlayers() do
 	end)
 end
 
-print("[Latch] Server bootstrap complete (Phase 6 UI/HUD/juice)")
+print("[Latch] Server bootstrap complete (Phase 7 anti-cheat + docs)")

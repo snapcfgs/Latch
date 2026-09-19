@@ -1,8 +1,21 @@
 --!strict
 --[[
 	WeaponService — server-authoritative hitscan, melee, grenades.
-	Validates fire rate, range, and ownership. Damage applied here only.
 	Actors: Player | BotRecord (via ActorUtil). State keyed by UserId.
+
+	==========================================================================
+	Validation model (Phase 7 — light anti-cheat)
+	==========================================================================
+	• Fire rate: LastFire + 1/FireRate with ~15% slop (AntiCheatUtil.FIRE_RATE_SLOP).
+	  Applies to hitscan (ServerFire) and melee (_onMelee). Same path for bots.
+	• Ownership: equipped weapon must be in loadout (humans); bots may equip primary.
+	• Origin: if client Origin is >20 studs from root, rebase to root (anti-teleport aim).
+	• Damage: IGNORE any client-reported Damage / Hit / Victim fields. Server raycast
+	  (_rayPellet) / melee overlap / grenade overlap apply damage via _applyDamage only.
+	  There is no RemoteEvent that accepts client damage amounts.
+	• Bots: BotService calls WeaponService:ServerFire / ServerReload — identical checks.
+	• Movement: not validated here. Do not rubber-band slides (see AntiCheatUtil).
+	==========================================================================
 ]]
 
 local Players = game:GetService("Players")
@@ -15,6 +28,7 @@ local Constants = require(game.ReplicatedStorage.Shared.Constants)
 local VFX = require(game.ReplicatedStorage.Util.VFX)
 local AbilityService = require(script.Parent.AbilityService)
 local ActorUtil = require(script.Parent.ActorUtil)
+local AntiCheatUtil = require(script.Parent.AntiCheatUtil)
 
 type Actor = ActorUtil.Actor
 type BotRecord = ActorUtil.BotRecord
@@ -601,6 +615,8 @@ function WeaponService:ServerFire(actor: Actor, payload: any)
 	if typeof(payload) ~= "table" then
 		return
 	end
+	-- Phase 7: never trust client damage / hit claims (strip by ignoring)
+	-- payload.Damage, payload.HitUserId, payload.VictimId are intentionally unused.
 	local weaponId = payload.WeaponId
 	local origin = payload.Origin
 	local direction = payload.Direction
@@ -623,7 +639,7 @@ function WeaponService:ServerFire(actor: Actor, payload: any)
 	if not root or not char then
 		return
 	end
-	if (origin - root.Position).Magnitude > 20 then
+	if (origin - root.Position).Magnitude > AntiCheatUtil.ORIGIN_REBASE_STUDS then
 		origin = root.Position + Vector3.new(0, 1.5, 0)
 	end
 
@@ -658,8 +674,8 @@ function WeaponService:ServerFire(actor: Actor, payload: any)
 	end
 
 	local now = Workspace:GetServerTimeNow()
-	local minInterval = 1 / math.max(cfg.FireRate, 0.1)
-	if now - ammo.LastFire < minInterval * 0.85 then
+	-- Authoritative clock; ignore payload.Timestamp
+	if not AntiCheatUtil.PassesFireRate(now, ammo.LastFire, cfg.FireRate) then
 		return
 	end
 	ammo.LastFire = now
@@ -802,8 +818,7 @@ function WeaponService:_onMelee(player: Player, lookDir: any)
 		return
 	end
 	local now = Workspace:GetServerTimeNow()
-	local minInterval = 1 / math.max(cfg.FireRate, 0.1)
-	if now - ammo.LastFire < minInterval * 0.85 then
+	if not AntiCheatUtil.PassesFireRate(now, ammo.LastFire, cfg.FireRate) then
 		return
 	end
 	ammo.LastFire = now
@@ -845,7 +860,7 @@ function WeaponService:_onGrenade(player: Player, origin: any, velocity: any)
 	if not root then
 		return
 	end
-	if (origin - root.Position).Magnitude > 25 then
+	if (origin - root.Position).Magnitude > AntiCheatUtil.GRENADE_ORIGIN_REBASE_STUDS then
 		origin = root.Position + Vector3.new(0, 3, 0)
 	end
 

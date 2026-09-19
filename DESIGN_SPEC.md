@@ -1,278 +1,142 @@
-# Latch — Roblox Arena Shooter (MVP Spec)
+# Latch — Design Spec (shipped MVP)
 
 ## Concept
-Competitive arena FPS inspired by Roblox Rivals (Nosniy Games): fast 1v1–4v4 duels, first to 5 rounds, loadouts (primary/secondary/melee/utility), slide + jump movement. Differentiator: each player picks an **Operator** with one active ability + one light passive. Guns win fights; abilities create openings. Deliberately light VFX (short-lived meshes/beams/UI, no particle storms).
+
+Competitive arena FPS: fast 1v1–4v4 (plus FFA / TDM / Gun Cycle / Beginner), first-to-5 round duels as the core loop, shared loadouts (primary / secondary / melee / utility), slide + jump movement. Differentiator: each player picks an **Operator** (one active + one light passive). Guns win fights; abilities create openings. Deliberately light VFX (short-lived Parts / Beams / Highlights / UI — no particle storms).
+
+Inspired by arena FPS games such as Rivals — original Latch operators, weapons, maps, and IP only.
 
 ## Tech stack
-- Rojo project (`default.project.json`) targeting Roblox Luau
-- Modern Luau style: `--!strict`, ModuleScripts, clear client/server split
-- Prefer Knit or a simple custom service framework if Knit adds friction — a clean custom bootstrap is fine for MVP
-- No paid assets required; placeholder meshes/parts for weapons and abilities
 
-## Repo layout (suggested)
+- Rojo (`default.project.json`) → Roblox Luau
+- `--!strict` ModuleScripts; custom bootstrap (no Knit / Wally required)
+- Placeholder Parts only — no paid / marketplace meshes required
+- Tooling pin: `aftman.toml` (Rojo)
+
+## Repo layout
+
 ```
-src/
-  ReplicatedStorage/
-    Shared/          -- constants, remotes config, types
-    Config/          -- weapons, operators, match settings
-  ServerScriptService/
-    Services/        -- MatchService, WeaponService, AbilityService, Movement validation
-  StarterPlayer/
-    StarterPlayerScripts/
-      Controllers/   -- input, camera helpers, ability UX, HUD
-  StarterGui/        -- HUD ScreenGui (or create at runtime)
-  Workspace/         -- Arena placeholder map (or generate via script)
-README.md            -- how to open with Rojo + Roblox Studio
-aftman.toml / wally.toml if useful
+game/
+  default.project.json
+  aftman.toml
+  README.md
+  DESIGN_SPEC.md
+  src/
+    ReplicatedStorage/
+      Shared/     -- Constants, Remotes, Types
+      Config/     -- Weapons, Operators, Modes, Maps, Bots, Monetization, Pass, Contracts, Cosmetics, Sounds, MatchSettings
+      Util/       -- VFX
+    ServerScriptService/
+      Bootstrap.server.lua
+      Services/   -- Match, Weapon, Ability, Bot, Map(+Maps/*), Data, Progression, Shop, Pass, Contract, Monetization, ActorUtil, AntiCheatUtil, LobbyBuilder, ArenaBuilder
+    StarterPlayer/StarterPlayerScripts/
+      Bootstrap.client.lua
+      Controllers/ -- Input, Weapon, Ability, Slide, HUD, Lobby, MapVote, Operator*, Loadout, Shop, Pass, Contract, Career, Recap, Emote, Audio, Viewmodel
+    StarterGui/   -- optional; most HUD built at runtime
 ```
 
 ## Match loop
-1. Lobby (`LobbyBuilder`) — pads + mode menu queue
-2. Queue fill (bot fill timers) → map vote → operator+loadout lock (8s) → countdown
-3. Round modes: eliminate opposing team; first to 5 round wins
-4. Continuous modes: FFA / TDM / Gun Cycle with timed respawn
-5. Match recap (Tokens/XP) → return to lobby
-6. Modes: see Phase 3 (`Config/Modes.lua`)
+
+1. Lobby (`LobbyBuilder`) — pads + mode menu; ambient lobby bots
+2. Queue fill (`Modes.FillSeconds` / `FillTarget`) → **map vote** (8s) → **operator+loadout lock** (8s) → countdown
+3. Round modes: eliminate opposing team; first to **5** round wins
+4. Continuous: FFA (first to 7, respawn 3s) / TDM (team score 30, respawn 3s) / Gun Cycle (weapon list, respawn 3s)
+5. Match recap (Tokens / XP / Pass XP) → rematch optional → lobby
+
+Solo Play fills empty slots with AI bots so Studio always runs a real match.
 
 ## Movement
-- Walk, sprint (or Roblox default run), crouch, **slide** (crouch while sprinting), jump
-- Server-authoritative where it matters; client prediction OK for slide feel
-- Phase 5 polish: **slide cancel into jump**; **bunny-hop speed cap** (`BunnyHopSpeedCap`); **landing spread penalty** 200ms
+
+- Walk, sprint, crouch, **slide** (crouch while sprinting), jump
+- Client prediction for slide feel; server does **not** rubber-band slides
+- Slide cancel into jump (keep momentum); bunny-hop horizontal speed cap; landing spread penalty ~200ms
 - Frag knock exists; Anchor reduces self knock (not a full explosive-jump kit)
 
-## Weapons (shared across operators)
-Minimal set — tune later:
-1. Assault Rifle (primary) — mid range, full auto
-2. Pistol (secondary)
-3. Knife (melee) — fast swing, small lunge optional
-4. Frag Grenade (utility) — simple projectile, light explosion VFX (sphere + fade, no particles)
+## Weapons
 
-Implement hit detection server-side (raycast for hitscan guns). Damage numbers readable in HUD.
+Shared across operators. Defaults keep stable ids (`AssaultRifle`, `Pistol`, `Knife`, `FragGrenade`).
+
+- Hitscan: server raycast; ADS reduces spread; shotgun = multi-pellet rays
+- Body multipliers via `Weapons.BodyMultiplier`
+- Utilities: Frag (explosion + knock), Flash (HUD), Smoke (VFX sphere), Stim (+30 HP / 2s, 1/round)
+- Loadout gated by `UnlockedWeapons` (starters always free)
 
 ## Operators
-Each: `Id`, `DisplayName`, `ActiveAbility`, `Passive`, cooldowns, simple VFX hooks.
 
-### Skid
-- Active: short friction dash forward (cooldown ~8s)
-- Passive: slightly longer slide distance
-- VFX: thin Part trail / Beam that despawns quickly
+| Id | Active | Passive |
+|----|--------|---------|
+| Skid | Friction dash (max distance server-clamped) | Longer slide |
+| Anchor | Cover plate ~4s | Self explosive knock resist |
+| Splice | One-way panel ~5s; allies walk+shoot through | Quieter crouch |
+| Jolt | Mark / Highlight ~3s | Faster reload after melee |
+| Fuse | Sticky delayed pop | Frag fuse −0.3s |
+| Warden | Vision pulse ≤40 studs / 4s | +10 armor while planted 0.6s |
 
-### Anchor
-- Active: deploy a brief cover plate (Part wall, ~4s lifetime, cooldown ~12s)
-- Passive: reduced self-knock from own Frag explosions (`LatchExplosiveKnockReduction`)
-- VFX: solid Part spawn/despawn, no particles
+Splice: CollisionGroup `LatchSpliceEnemy` + ally `NoCollisionConstraint`; hitscan pierce via `LatchSpliceTeam` (see `AbilityService` header).
 
-### Splice
-- Active: one-way panel (~5s); **allies walk and shoot through**, enemies blocked
-- Collision: panel on `LatchSpliceEnemy` (collides with `LatchPlayers`); allies get `NoCollisionConstraint`; hitscan pierce via `LatchSpliceTeam` attribute (see `AbilityService` header)
-- Passive: quieter footsteps while crouched
-- VFX: semi-transparent Part + simple highlight
+## Maps & lobby
 
-### Jolt
-- Active: sticky mark on hit target — brief outline/highlight through walls (~3s reveal, cooldown ~10s)
-- Passive: slightly faster reload after a melee hit (short buff window)
-- VFX: Highlight instance or simple BillboardGui ping — no lightning particle storms
+Six code-generated arenas (`MapService` / `Services/Maps/*`): Splityard, Voltage, Hollow, Dredge, Glassline, Ridge.  
+Each: SpawnA/SpawnB, cover tags, bot waypoints/cover nodes, kill floor, lighting hints.
 
-### Fuse (Phase 5)
-- Active: sticky delayed pop — ray stick, delay ~1.15s, small sphere damage (cooldown ~11s)
-- Passive: Frag fuse time −0.3s (`LatchFragFuseBonus`)
-- VFX: neon sticky Part + explosion sphere
+Lobby: plaza, colored queue pads, shop/pass/contract/career kiosks, operator alcove, Ready Together **soft stub**, ambient bots on pads.
 
-### Warden (Phase 5)
-- Active: vision pulse — Highlight hostiles within 40 studs for 4s (cooldown ~13s)
-- Passive: +10 armor while planted (not moving 0.6s) via `LatchPlantedArmor`
-- VFX: Highlight outlines only
+## Modes
 
-## Performance rules (enforce in code comments + VFX helpers)
-- Cap concurrent ability VFX instances
-- Prefer Parts, Beams, Highlights, BillboardGui over ParticleEmitters
+See `Config/Modes.lua` — 1v1/2v2/3v3/4v4 (rounds to 5), FFA, TDM, Gun Cycle, Beginner2v2 (Recruit, −15% damage taken), Casual Mix (random casual resolve).
+
+## Progression & economy
+
+- **Profile** (`DataService`): Tokens, Scrap, SkinTickets, Xp/Level, UnlockedWeapons, EquippedLoadout, Cosmetics, Pass, Contracts, Stats, CasePity. DataStore `LatchPlayer_v1` when available; in-memory Studio fallback.
+- **Grants:** win 25 / loss 10 Tokens + XP; kill/damage bonuses; Pass XP formula in README / `BattlePass.lua` / `ProgressionService.ComputePassXp`.
+- **Shop / cases / cosmetics:** Featured + weapons + skins + wraps; Skin Case Alpha/Beta; pity 10 → Rare+; duplicates → Scrap.
+- **Pass:** Season 01 "Live Wire", 40 tiers, Free + Prime; 20 Pass XP = 1 tier.
+- **Contracts:** 3 dailies; UTC day live / 30m Studio refresh.
+- **Monetization:** `IS_MONETIZATION_LIVE = false` — Prompt* no-ops; Studio `DebugGrant` for Starter Bundle etc.
+
+## UI
+
+Lobby hub (operator cards, loadout strip + skin/wrap swatches, queue menu, hub tabs, player banner level/wrap/streak, emote stubs).  
+In-match: crosshair by weapon/ADS, health, ammo, ability radial, round score + living pips, kill feed (5), Tab scoreboard, death recap line, mobile safe-area chrome.  
+Recap: scoreboard + reward bar tweens + Rematch.
+
+## Netcode / anti-cheat (Phase 7)
+
+Light server authority:
+
+1. Rate-limit `FireWeapon` / melee by weapon `FireRate` with ~15% slop
+2. Ability cooldown + Skid max dash distance server-side
+3. Ignore client-reported damage — server raycast / overlap only
+4. Bot shots use the same `ServerFire` / `ServerUse` validation as players
+5. Do not rubber-band slides; movement checks stay minimal
+
+Helpers: `AntiCheatUtil.lua`. Documented in `WeaponService` / `AbilityService` headers.
+
+## Performance rules
+
+- Cap concurrent ability VFX; prefer Parts / Beams / Highlights / BillboardGui over ParticleEmitters
 - Short lifetimes; pool/reuse where easy
-- No camera shake spam, no full-screen bloom
+- No camera-shake spam / full-screen bloom storms
 
-## Maps (Phase 1) + Lobby (Phase 3)
-Six code-generated Parts arenas via `MapService` / `Services/Maps/*`.
-Lobby is a real `LobbyBuilder` space (pads, kiosk stubs, alcove) with ambient bots. Match loads a voted map with SpawnA/SpawnB, cover tags, bot nav nodes, kill floor, and lighting.
+## Cross-platform (hard requirement)
 
-## UI (MVP)
-- Crosshair
-- Health
-- Ammo
-- Ability cooldown indicator
-- Round score (e.g. 2–1)
-- Operator select before match (simple buttons)
+Same damage, abilities, and netcode on PC and mobile. Abstract input; large touch targets; HUD safe-area aware. Light VFX for mid-range phones.
 
-## Out of scope (still later)
+## Out of scope / known gaps
+
 - Ranked / ELO
-- Ranked cosmetics marketplace polish (Phase 4 ships core economy)
-- Full lobby cosmetics
-- Real party sync (Ready Together is a soft stub in Phase 3)
-- Complex animation packs
-- Voice chat
+- Real party sync (Ready Together stub only)
+- Tournament-level bot AI (no bot grenades yet)
+- Killcam; full animation packs; voice chat
+- Live Robux products (flagged off); Scrap sink polish
+- Toolbox audio IDs (stubs only)
 
-## Success criteria
-1. Rojo project syncs cleanly; README explains Studio + Rojo workflow
-2. Player can slide, shoot the AR/pistol, melee, throw grenade
-3. Operator select works; each of 6 abilities does something useful and networked
-4. 1v1 first-to-5 match loop runs with round resets
-5. Arena map exists and is playable
-6. Code is organized, typed (`--!strict` where practical), and comments note VFX budget
+## Success criteria (shipped)
 
-## Implementation notes
-- Use RemoteEvents/RemoteFunctions carefully; validate all ability/weapon requests on server
-- Anti-cheat light: rate-limit ability use, validate dash distance, validate grenade spawn
-- Prefer modular configs so balancing numbers live in Config modules, not buried in scripts
-
-## Cross-platform (HARD REQUIREMENT)
-- Seamless mobile + PC: touch controls and keyboard/mouse
-- Same damage, ability rules, and netcode on both platforms
-- Abstract input (ContextActionService / input map); large touch targets; HUD safe-area aware
-- Prefer light VFX for mid-range mobile performance
-
-
-## Phase 0 — AI bots & solo Play (implemented)
-
-Solo Studio Play is a real first-to-5 match vs AI bots (not empty-team practice).
-
-### Bot system
-- `Config/BotNames.lua` — name pool + `DisplayName#####` tags
-- `Config/Bots.lua` — Recruit / Standard / Sweat (accuracy cone, reaction delay, move jitter, ability use chance)
-- `BotService` — spawn/despawn Humanoid bots with attributes `IsBot`, `TeamId`, `OperatorId`, `Difficulty`, `DisplayName`
-- Waypoint graph from `ArenaBuilder` (invisible Parts/Attachments)
-- AI states: Idle, Hunt, TakeCover, Peek, Shoot, Reload, Ability, Retreat, Rotate
-- Combat goes through `WeaponService:ServerFire` / `AbilityService:ServerUse` with `Actor` = Player | BotRecord
-- LobbyBotDirector maintains 6–12 lobby wanderers with simple emote stubs
-
-### Match fill
-- 1v1: after **3s** without a second human → add bot opponent and start
-- 2v2: after **4s** → fill remaining slots with bots
-- Rounds end when one team has 0 alive (humans + bots). **No** empty team B practice skip.
-- Mid-fill human join replaces lowest-difficulty bot; `StandInReplaced` / `Announce` remotes notify clients
-
-### Remotes added
-- `Announce`, `StandInReplaced` (via `Remotes.lua` only)
-
-
-## Phase 1 — Maps & map vote (implemented)
-
-### Map registry
-- `Config/Maps.lua` — Id, DisplayName, SizeClass (Small/Medium/Large), ThumbnailColor, Description, Lighting hints
-
-### MapService
-- Load/clear `LatchMap`, park/restore lobby `LatchArena`
-- Apply lighting (ClockTime, Fog, Ambient)
-- Expose SpawnA/SpawnB, Waypoints, CoverNodes for bots
-- KillFloor touch → Humanoid death
-- Map vote: pick 3 options (last-played down-weighted), 8s window, bot votes favor variety, persist last map in server memory
-
-### Maps (original names only — Parts geometry)
-1. Splityard (Small)
-2. Voltage (Small)
-3. Hollow (Medium)
-4. Dredge (Medium)
-5. Glassline (Medium) — non-breakable glass Parts
-6. Ridge (Large)
-
-Each map includes mirrored SpawnA/SpawnB (extras for future 3v3+), Cover / HighGround / Chokepoint tags, bot waypoints + cover nodes, kill floor, lighting hints.
-
-### Match flow change
-Queue fill → **MapVote** → Countdown → Round… → MatchEnd → lobby (map cleared)
-
-### Remotes added
-- `MapVoteStart`, `MapVoteCast`, `MapVoteUpdate`, `MapVoteResult` (via `Remotes.lua` only)
-
-### Client
-- `MapVoteController` — 3 buttons + timer; mouse unlocked during MapVote
-
-
-## Phase 2 — Weapons, ADS, pellets, utilities (implemented)
-
-### Roster
-Primaries: Pulse AR, Coil SMG, Longscope, Breach Shotgun, Cycle Burst  
-Secondaries: Sidearm, Machine Pistol, Stub Revolver  
-Melees: Blade, Crowbar, Bat  
-Utilities: Frag, Flash Can, Smoke Can, Stim Cap  
-
-Ids keep `AssaultRifle` / `Pistol` / `Knife` / `FragGrenade` for the defaults so Phase 0/1 boot paths stay stable.
-
-### Combat
-- Server raycast hitscan; shotgun = multi-pellet rays; ADS reduces spread via `Aiming` on `FireWeapon`
-- Limb / torso / head multipliers from `Weapons.BodyMultiplier`
-- Burst (`CycleBurst`) client-queued; balance in Config only
-- Utilities: Frag explosion; Flash → `FlashEffect` HUD; Smoke → `VFX.SmokeSphere`; Stim → 30 HP / 2s, 1 per round
-- Loadout: 1 of each slot via `SetLoadout` + `LoadoutController` (UnlockedWeapons gate)
-- Bots randomize loadout; `GetEquipped` drives bot fire; `KillFeed` / `Announce` include bots
-
-### Remotes added
-`SetLoadout`, `FlashEffect`, `KillFeed` (via `Remotes.lua` only)
-
-
-## Phase 3 — Modes, lobby pads, menu queue (implemented)
-
-### Config
-- `Config/Modes.lua` — 1v1, 2v2, 3v3, 4v4 (first to 5 rounds); FFA (first to 7 elims, **respawn 3s**); TDM (score to 30, mid-match respawn); Gun Cycle (fixed weapon list, elim advances); Beginner 2v2 (Recruit bots, damage taken −15%); Casual Mix (resolves to random casual mode)
-- `MatchSettings.OperatorLockSeconds = 8`, `MatchRecapSeconds = 8`
-
-### MatchService
-- Extended (not forked) for all modes; generalized bot fill via `FillSeconds` / `FillTarget`; team sizes 3 and 4 supported
-- Flow: Queue → MapVote → **OperatorLock** → Countdown → rounds/continuous → **MatchRecap** → Lobby
-- FFA/GunCycle use unique per-fighter team ids (`F{userId}`) so `_sameTeam` / bot targeting work
-- Stats (K/D/damage) tracked in WeaponService for recap; ProgressionService fills Tokens/XP
-
-### Lobby
-- `LobbyBuilder` (+ `ArenaBuilder` facade): central floor, shop/pass/contract kiosks (live), leaderboard stub, operator alcove, Ready Together party **soft stub**
-- Queue pads with original colors + ProximityPrompt; LobbyController menu for mobile
-- LobbyBotDirector wanders between pads and lingers (visual queue join)
-
-### Remotes
-- `MatchRecap`, `RequestLeaveQueue` (via `Remotes.lua` only)
-
-### Client
-- `LobbyController`, `MatchRecapController`; OperatorSelect slimmed to operator picks; queue UI on the right
-
-
-## Phase 4 — Progression & economy (implemented)
-
-### Profile (`DataService`)
-Versioned profile: Tokens, Scrap, SkinTickets, Xp/Level, UnlockedWeapons, EquippedLoadout, Cosmetics, Pass, Contracts, Stats, CasePity.  
-DataStore `LatchPlayer_v1` when available; **in-memory fallback in Studio**. Autosave 60s + BindToClose when DataStores work.
-
-### Progression
-Match end → win 25 / loss 10 Tokens + XP bonuses; Pass XP; Stats; contract progress. Recap shows real grants.
-
-### Shop / Cases / Cosmetics
-Featured, weapons, skins, wraps, Skin Case Alpha/Beta (ticket or debug). Pity 10 → Rare+ guarantee; duplicate → Scrap.  
-`ViewmodelController` recolors tool/viewmodel Parts from equipped skin/wrap.
-
-### Battle Pass
-Season 01 "Live Wire", 40 tiers, Free + Prime. **20 Pass XP = 1 tier** (see README formula).
-
-### Contracts
-3 dailies; 24h UTC live / 30m session Studio refresh.
-
-### Monetization
-`IS_MONETIZATION_LIVE = false` — Prompt* no-ops; Studio DebugGrant for Starter Bundle etc.
-
-### Remotes added
-`ProfileSync`, `RequestProfile`, `ShopBuy`, `ShopResult`, `OpenCase`, `EquipCosmetic`, `PassClaim`, `PassResult`, `ContractClaim`, `ContractRefresh`, `ContractResult`, `DebugGrant`, `PromptPurchase`
-
-## Phase 5 — Operators + combat/movement polish (implemented)
-
-### Operators
-Fuse + Warden added to `Config/Operators.lua` / AbilityService / OperatorSelect / BotService random pick.
-
-### Combat polish
-- Splice ally walk-through via CollisionGroups + NoCollisionConstraint (documented in AbilityService)
-- Anchor Frag knock wired through WeaponService (`_applyFragKnock`)
-- Viewmodel: local camera Part in `ViewmodelController` (skins/wraps)
-- Death recap: `DeathRecap` remote → HUD `"Name [Weapon] Xm head"`
-
-### Movement polish
-- Slide → jump cancel; bunny-hop horizontal cap; landing spread +3.5° for 200ms
-
-### Remotes added
-`DeathRecap`
-
-
-## Phase 6 — UI / HUD / juice (implemented)
-
-Lobby hub (operator cards, loadout strip + swatches, queue clarity, Shop/Pass/Contracts/Career, player banner level/wrap/streak), in-match HUD polish (weapon crosshair, living pips, ability radial, 5-line kill feed, Tab scoreboard, mobile safe-area chrome), match recap rematch + reward bar tweens, AudioController silent stubs (`Config/Sounds.lua`), EmoteController (6 Cosmetics stubs). Remotes: `RequestRematch`. Win streak on `Stats.WinStreak`.
+1. Rojo syncs; README covers Studio + Rojo + Solo Play path
+2. Slide, shoot, ADS, melee, utilities, six operators networked
+3. Full mode set with bot fill; map vote; first-to-5 (or continuous win rules)
+4. Six original maps load from vote
+5. Progression: Tokens/XP/Pass/Contracts/Shop Debug in Studio
+6. PC + mobile emulator controls
+7. Phase 7 validation hardened; docs match the shipped game
